@@ -1,0 +1,235 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+  runtime  = "bun"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  admin
+  manager
+  teacher
+  student
+  @@map("position")
+}
+
+enum LessonStatus {
+  scheduled
+  completed
+  cancelled
+}
+
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+  sessions      Session[]
+  accounts      Account[]
+  profile       Profile?
+  @@map("auth_users")
+}
+
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  expiresAt DateTime @db.Timestamptz(6)
+  token     String   @unique
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  ipAddress String?
+  userAgent String?
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@map("auth_sessions")
+}
+
+model Account {
+  id                    String    @id @default(uuid()) @db.Uuid
+  accountId             String
+  providerId            String
+  userId                String    @db.Uuid
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime? @db.Timestamptz(6)
+  refreshTokenExpiresAt DateTime? @db.Timestamptz(6)
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @db.Timestamptz(6)
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([providerId, accountId])
+  @@index([userId])
+  @@map("auth_accounts")
+}
+
+model Verification {
+  id         String   @id @default(uuid()) @db.Uuid
+  identifier String
+  value      String
+  expiresAt  DateTime @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+  @@index([identifier])
+  @@map("auth_verifications")
+}
+
+model Profile {
+  id              String    @id @db.Uuid
+  firstName       String?   @map("first_name")
+  lastName        String?   @map("last_name")
+  phone           String?
+  profilePhotoUrl String?   @map("profile_photo_url")
+  role            Role      @default(student)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user            User      @relation(fields: [id], references: [id], onDelete: Cascade)
+  student         Student?
+  teacher         Teacher?
+  manager         Manager?
+  admin           Admin?
+  notifications   Notification[]
+  @@map("profiles")
+}
+
+model Student {
+  id           String    @id @default(uuid()) @db.Uuid
+  profileId    String    @unique @map("profile_id") @db.Uuid
+  englishLevel String?   @map("english_level")
+  learningGoal String?   @map("learning_goal")
+  status       String?   @default("active")
+  startDate    DateTime? @map("start_date") @db.Date
+  endDate      DateTime? @map("end_date") @db.Date
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  profile      Profile   @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  enrollments  Enrollment[]
+  progress     ProgressRecord[]
+  payments     Payment[]
+  @@map("students")
+}
+
+model Teacher {
+  id             String  @id @default(uuid()) @db.Uuid
+  profileId      String  @unique @map("profile_id") @db.Uuid
+  specialization String
+  profile        Profile @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  courses        Course[]
+  enrollments    Enrollment[]
+  lessons        Lesson[]
+  progress       ProgressRecord[]
+  @@map("teachers")
+}
+
+model Manager {
+  id        String  @id @default(uuid()) @db.Uuid
+  profileId String  @unique @map("profile_id") @db.Uuid
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  @@map("manager")
+}
+
+model Admin {
+  id        String  @id @default(uuid()) @db.Uuid
+  profileId String  @unique @map("profile_id") @db.Uuid
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  @@map("admin")
+}
+
+model Course {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  category    String
+  description String?
+  duration    BigInt?
+  price       Decimal  @db.Decimal(12, 2)
+  active      Boolean  @default(true)
+  teacherId   String   @map("teacher_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  teacher     Teacher  @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  enrollments Enrollment[]
+  payments    Payment[]
+  @@index([teacherId])
+  @@map("courses")
+}
+
+model Enrollment {
+  id        String   @id @default(uuid()) @db.Uuid
+  studentId String   @map("student_id") @db.Uuid
+  courseId  String   @map("course_id") @db.Uuid
+  teacherId String   @map("teacher_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  teacher   Teacher  @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  lessons   Lesson[]
+  @@unique([studentId, courseId])
+  @@index([courseId])
+  @@index([teacherId])
+  @@map("enrollments")
+}
+
+model Lesson {
+  id           String       @id @default(uuid()) @db.Uuid
+  enrollmentId String       @map("enrollment_id") @db.Uuid
+  teacherId    String       @map("teacher_id") @db.Uuid
+  date         DateTime     @db.Date
+  startTime    DateTime     @map("start_time") @db.Time(6)
+  endTime      DateTime?    @map("end_time") @db.Time(6)
+  status       LessonStatus @default(scheduled)
+  enrollment   Enrollment   @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+  teacher      Teacher      @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  progress     ProgressRecord[]
+  @@index([enrollmentId])
+  @@index([teacherId, date])
+  @@map("lessons")
+}
+
+model ProgressRecord {
+  id        String  @id @default(uuid()) @db.Uuid
+  studentId String  @map("student_id") @db.Uuid
+  lessonId  String  @map("lesson_id") @db.Uuid
+  teacherId String  @map("teacher_id") @db.Uuid
+  score     Decimal @db.Decimal(5, 2)
+  comment   String?
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  lesson    Lesson  @relation(fields: [lessonId], references: [id], onDelete: Restrict)
+  teacher   Teacher @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  @@index([studentId])
+  @@index([lessonId])
+  @@index([teacherId])
+  @@map("progress_records")
+}
+
+model Payment {
+  id         String  @id @default(uuid()) @db.Uuid
+  studentId  String  @map("student_id") @db.Uuid
+  courseId   String  @map("course_id") @db.Uuid
+  amount     Decimal @db.Decimal(12, 2)
+  status     Boolean @default(false)
+  receiptUrl String  @map("reciept_url")
+  student    Student @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  course     Course  @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  @@index([studentId])
+  @@index([courseId])
+  @@map("payments")
+}
+
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  title     String
+  message   String
+  type      String?
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  profile   Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, isRead, createdAt])
+  @@map("notifications")
+}
