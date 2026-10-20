@@ -53,6 +53,40 @@ try {
   const visible = (await request("/api/enrollments", 200, undefined, teacherLogin.cookie)).data;
   if (!visible.some((row: { id: string }) => row.id === enrollment.id)) throw new Error("Teacher cannot see assigned enrollment");
   await request("/api/lessons", 404, undefined, cookie);
+
+  // Exercise the actual operator command without putting passwords in arguments.
+  await request("/api/me", 200, undefined, studentLogin.cookie);
+  const newPassword = crypto.randomUUID() + "Aa1!";
+  const reset = Bun.spawn([process.execPath, "run", "account:reset-password"], {
+    cwd: new URL("..", import.meta.url).pathname,
+    stdin: new Blob([JSON.stringify({ email: email("student"), password: newPassword })]),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [resetOutput, , resetExit] = await Promise.all([
+    new Response(reset.stdout).text(),
+    new Response(reset.stderr).text(),
+    reset.exited,
+  ]);
+  if (resetExit !== 0) throw new Error("Password reset command failed");
+  const resetResult = JSON.parse(resetOutput);
+  if (resetResult.id !== student.profileId || resetResult.revokedSessions < 1)
+    throw new Error("Password reset did not revoke the temporary student's session");
+  console.log("PASS operator password reset command");
+  await request("/api/me", 401, undefined, studentLogin.cookie);
+  console.log("PASS old session rejected after password reset");
+  // Better Auth permits three sign-in requests per 10 seconds by default.
+  // Earlier role checks use that allowance; keep production rate limiting enabled.
+  console.log("Waiting 11 seconds for the login rate-limit window");
+  await Bun.sleep(11_000);
+  await request("/api/auth/sign-in/email", 401, { email: email("student"), password });
+  console.log("PASS old password rejected");
+  const recovered = await request("/api/auth/sign-in/email", 200, { email: email("student"), password: newPassword });
+  if (!recovered.cookie) throw new Error("Recovered login did not issue a session cookie");
+  await request("/api/me", 200, undefined, recovered.cookie);
+  console.log("PASS new password and session work");
+  await request("/api/me", 200, undefined, cookie);
+  console.log("PASS another user's session remains valid");
 } finally {
   await db.$transaction(async tx => {
     if (courseId) {
