@@ -9,6 +9,7 @@ a draft schema reference on 2026-10-16; it is not this application's database.
 - Eleven school models and four Better Auth models, with reproducible SQL migrations.
 - Closed public signup; operator-only account creation for all four roles.
 - Better Auth email/password login, sessions, logout, and Expo plugin.
+- Operator password recovery with transactional session revocation.
 - Authenticated profile, role-scoped course/enrollment lists, staff course creation,
   and staff enrollment creation. Enrollment teacher IDs come from the course.
 - Student/teacher account creation and profile updates for admins/managers, plus
@@ -75,6 +76,25 @@ Use `student`, `manager`, or `teacher` for the other account types. Teachers als
 require `specialization`. Passwords must contain 12–128 characters. Provisioning
 does not send email; arrange initial credential delivery privately. Email verification
 and recovery delivery must be added before the student pilot.
+
+## Recover a password
+
+An operator with server/database access can reset an existing password account.
+The command accepts JSON through stdin and revokes all sessions for that user in
+the same transaction. The user must sign in again with the new password.
+
+```powershell
+$schoolCredential = Get-Credential -Message 'Existing school account email and new password'
+@{
+  email = $schoolCredential.UserName
+  password = $schoolCredential.GetNetworkCredential().Password
+} | ConvertTo-Json -Compress | bun run account:reset-password
+Remove-Variable schoolCredential
+```
+
+Passwords must contain 12–128 characters. The command prints only the user ID and
+number of revoked sessions. It does not send email; deliver the replacement
+credential privately. Self-service email recovery remains pending.
 
 ## Routes
 

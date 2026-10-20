@@ -1,4 +1,4 @@
-import { Elysia } from "elysia";
+import { Elysia} from "elysia";
 import { z } from "zod";
 import type { PrismaClient, Prisma } from "./generated/prisma/client";
 import { HttpError, requireStaff, type Actor } from "./authorization";

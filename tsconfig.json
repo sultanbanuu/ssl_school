@@ -7,7 +7,15 @@
     "noEmit": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["bun"]
+    "types": [
+      "bun"
+    ]
   },
-  "include": ["src", "scripts", "tests", "prisma.config.ts"]
+  "include": [
+    "src",
+    "scripts",
+    "tests",
+    "prisma.config.ts"
+  ],
+  "extends": "expo/tsconfig.base"
 }
