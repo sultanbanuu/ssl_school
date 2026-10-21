@@ -1,8 +1,10 @@
 node_modules/
-.expo/
 .env
 .env.*
 !.env.example
 src/generated/
 coverage/
+dist/
 *.log
+.expo/
+.expo

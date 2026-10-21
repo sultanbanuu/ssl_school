@@ -5,7 +5,9 @@ Restart `bun run dev` if your server has not automatically reloaded.
 
 ## Permissions and responses
 
-Admins and managers can create and update student/teacher records. The route fixes
+Admins and managers can create students and update student/teacher records.
+Only admins can create teachers or promote students to teacher/manager through
+`PATCH /api/users/:id/role` (see README). The creation route fixes
 the account role; caller-supplied roles, IDs, and unexpected fields are rejected.
 User, credential account, profile, and role record are created in one transaction.
 Passwords are hashed with Better Auth and never returned. Duplicate emails return 409.
@@ -29,7 +31,7 @@ remove existing enrollments. Account suspension is a separate future feature.
 
 ## Try it from PowerShell
 
-Use a second PowerShell terminal while the API runs. First sign in as admin/manager
+Use a second PowerShell terminal while the API runs. First sign in as admin
 and retain `$schoolSession` (if you already have a valid session, skip this block):
 
 ```powershell
@@ -96,3 +98,13 @@ Invoke-RestMethod -Uri 'http://localhost:3000/api/enrollments' -Method Post -Con
 These commands create real records in your configured development database. Choose
 the intended names and email addresses. No invitation email is sent yet. If requests
 return 401, repeat the administrator login block to refresh the session.
+
+
+## Repeatable HTTP workflow check
+
+With the API running against the configured database, run `bun run check:school`.
+This creates a temporary admin and completes teacher/student creation and updates,
+course creation with teacher assignment, and enrollment through HTTP. It checks
+persisted relationships and invalid/duplicate requests, then removes its test data.
+The script uses `BETTER_AUTH_URL` as its server address; it must point to the running
+API using the same database. See `docs/verification.md` for the verified local command.

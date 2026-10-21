@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { createAuth } from "../src/auth";
 import { createDatabase } from "../src/db";
 
-test("public signup is disabled before any database write", async () => {
+test("public signup rejects short passwords before any database write", async () => {
   const db = createDatabase("postgresql://unused:unused@127.0.0.1:1/unused");
   try {
     const auth = createAuth(db, {
@@ -12,9 +12,9 @@ test("public signup is disabled before any database write", async () => {
     });
     const response = await auth.handler(new Request("http://localhost:3000/api/auth/sign-up/email", {
       method: "POST", headers: { "content-type": "application/json", origin: "http://localhost:8081" },
-      body: JSON.stringify({ name: "Unauthorized", email: "outsider@example.test", password: "long-enough-password" }),
+      body: JSON.stringify({ name: "Student", email: "student@example.test", password: "short" }),
     }));
     expect(response.status).toBe(400);
-    expect((await response.json()).code).toBe("EMAIL_PASSWORD_SIGN_UP_DISABLED");
+    expect((await response.json()).code).toBe("PASSWORD_TOO_SHORT");
   } finally { await db.$disconnect(); }
 });

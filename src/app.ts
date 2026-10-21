@@ -4,6 +4,7 @@ import { Prisma, type PrismaClient } from "./generated/prisma/client";
 import { HttpError, courseScope, enrollmentScope, requireStaff, type Actor } from "./authorization";
 import { createCourseBody, createEnrollmentBody, pagination } from "./contracts";
 import { peopleRoutes } from "./people";
+import { roleRoutes } from "./roles";
 
 type Dependencies = {
   db: PrismaClient;
@@ -43,6 +44,7 @@ export function createApp({ db, getSession, authHandler, origins }: Dependencies
     })
     .all("/api/auth/*", ({ request }) => authHandler(request))
     .use(peopleRoutes(db, actorFor))
+    .use(roleRoutes(db, actorFor))
     .get("/api/me", async ({ request }) => {
       const actor = await actorFor(request);
       return db.profile.findUnique({ where: { id: actor.id }, include: { student: true, teacher: true } });

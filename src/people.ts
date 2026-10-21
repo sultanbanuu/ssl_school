@@ -1,7 +1,7 @@
 import { Elysia} from "elysia";
 import { z } from "zod";
 import type { PrismaClient, Prisma } from "./generated/prisma/client";
-import { HttpError, requireStaff, type Actor } from "./authorization";
+import { HttpError, requireStaff, requireAdmin, type Actor } from "./authorization";
 import { pagination } from "./contracts";
 import { provisionAccount } from "./accounts";
 
@@ -94,7 +94,7 @@ export function peopleRoutes(db: PrismaClient, actorFor: (request: Request) => P
       return teacher;
     }, { params: idParams })
     .post("/api/teachers", async ({ request, body, set }) => {
-      requireStaff(await actorFor(request));
+      requireAdmin(await actorFor(request));
       const result = await provisionAccount(db, { ...body, role: "teacher" });
       set.status = 201;
       return { id: result.teacher!.id, profileId: result.id, role: result.role };

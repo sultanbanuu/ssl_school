@@ -47,12 +47,17 @@ test("staff creation hashes credentials and creates a fixed student role atomica
   expect(calls[2].args.data.role).toBe("student");
   expect(calls[2].args.data.student).toEqual({ create: {} });
 });
-test("manager can create teacher with specialization", async () => {
-  const { send, calls } = setup("manager");
+test("admin can create teacher with specialization", async () => {
+  const { send, calls } = setup("admin");
   const response = await send("/api/teachers", "POST", { ...account, specialization: "English" });
   expect(response.status).toBe(201);
   expect((await response.json()).id).toBe(teacherId);
   expect(calls[2].args.data.teacher).toEqual({ create: { specialization: "English" } });
+});
+test("manager cannot create a teacher account", async () => {
+  const { send, calls } = setup("manager");
+  expect((await send("/api/teachers", "POST", { ...account, specialization: "English" })).status).toBe(403);
+  expect(calls).toHaveLength(0);
 });
 test("duplicate email returns 409 and does not proceed to profile creation", async () => {
   const { send, calls } = setup("admin", true);

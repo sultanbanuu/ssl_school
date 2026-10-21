@@ -7,12 +7,14 @@ a draft schema reference on 2026-10-16; it is not this application's database.
 ## Implemented
 
 - Eleven school models and four Better Auth models, with reproducible SQL migrations.
-- Closed public signup; operator-only account creation for all four roles.
+- Public email/password signup always creates a student profile.
+- Admin-only student promotion to teacher or manager; teacher creation is admin-only.
 - Better Auth email/password login, sessions, logout, and Expo plugin.
+- Expo signup/sign-in screens with validation, session restoration, and logout.
 - Operator password recovery with transactional session revocation.
 - Authenticated profile, role-scoped course/enrollment lists, staff course creation,
   and staff enrollment creation. Enrollment teacher IDs come from the course.
-- Student/teacher account creation and profile updates for admins/managers, plus
+- Student creation and profile updates for admins/managers, plus
   scoped list/detail endpoints. See [people management](docs/people-management.md).
 - Zod contracts, bounded pagination, decimal-string money, and safe API errors.
 - SQL constraint tests using disposable PGlite, plus HTTP authorization and auth tests.
@@ -20,7 +22,7 @@ a draft schema reference on 2026-10-16; it is not this application's database.
 This is the first backend milestone, not the complete mobile app. Lesson/progress/
 payment/notification tables exist, but their API routes and screens are still pending.
 Invitation email, password reset email, uploads, scheduling conflict prevention,
-audit trails, deployment, and Expo UI remain on the roadmap.
+audit trails, deployment, and school dashboard screens remain on the roadmap.
 
 ## Start locally
 
@@ -54,7 +56,7 @@ On a physical phone, configure a reachable API URL and matching trusted origins;
 
 ## Provision the first account
 
-There is no public signup and no default admin password. The local operator command
+Public signup creates students only; there is no default admin password. The local operator command
 creates the auth user, credential account, profile, and role record in one transaction.
 It reads JSON from stdin so passwords do not need to appear in command arguments.
 
@@ -102,13 +104,14 @@ credential privately. Self-service email recovery remains pending.
 | --- | --- | --- |
 | GET | `/health` | Process liveness |
 | GET | `/ready` | Database readiness; 503 when unavailable |
-| GET/POST | `/api/auth/*` | Better Auth handlers; public signup disabled |
+| GET/POST | `/api/auth/*` | Better Auth handlers; public signup creates students only |
+| PATCH | `/api/users/:id/role` | Admin only; promote a student to teacher or manager |
 | GET | `/api/me` | Own profile |
 | GET | `/api/students` and `/api/students/:id` | Staff: all; teachers: assigned students; students: own |
 | POST | `/api/students` | Admin/manager; creates student account |
 | PATCH | `/api/students/:id` | Admin/manager |
 | GET | `/api/teachers` and `/api/teachers/:id` | Staff: all; teachers: own; students: denied |
-| POST | `/api/teachers` | Admin/manager; creates teacher account |
+| POST | `/api/teachers` | Admin only; creates teacher account |
 | PATCH | `/api/teachers/:id` | Admin/manager |
 | GET | `/api/courses` | Students: active courses; teachers: assigned courses; staff: all |
 | POST | `/api/courses` | Admin/manager |
@@ -146,10 +149,36 @@ bun test
 
 PGlite tests apply all committed migrations to a disposable PostgreSQL engine.
 They test constraints and anonymous RLS isolation without touching Supabase. API
-tests inject a database/session boundary and verify access filters. The closed-signup
-test exercises the actual Better Auth handler. These do not yet verify a full
-login-to-Prisma workflow against a network PostgreSQL server; run that integration
-after provisioning the development database.
+tests inject a database/session boundary and verify access filters. The signup
+validation test exercises the actual Better Auth handler.
+
+With a development database configured, run `bun scripts/check-admin-flow.ts` to
+check login, school workflows, password recovery, student signup, and admin-only
+promotions against PostgreSQL. It creates and removes its own temporary records.
+
+## Signup and role assignment
+
+Send `name`, `email`, and a 12–128 character `password` to
+`POST /api/auth/sign-up/email`. Better Auth returns a session; `/api/me` returns
+the student's school profile. Supplied role fields cannot grant privileges.
+The signup display name is stored in the profile's firstName field.
+
+An authenticated admin can promote an existing student using their **profile/user ID**
+(not the student record ID):
+
+```text
+PATCH /api/users/<profile-id>/role
+{ "role": "teacher", "specialization": "English" }
+
+PATCH /api/users/<profile-id>/role
+{ "role": "manager" }
+```
+
+Promotions preserve student history and revoke the user's sessions, so they must
+sign in again. This endpoint accepts only student-to-teacher/manager promotions;
+it does not grant admin access or change existing staff roles. Managers cannot
+promote users or create teachers. Trusted server operators retain the bootstrap CLI.
+Study-time availability questions remain a future onboarding step.
 
 ## Team workflow
 
@@ -160,3 +189,28 @@ Commit schema, migrations, package manifests, and lockfile together. Generated P
 files and secrets are ignored. CI generates Prisma Client before type checking.
 
 See [schema decisions](docs/schema-decisions.md) and [roadmap](docs/roadmap.md).
+
+## Signup and sign-in screens
+
+The Expo app lives in `mobile/`. It provides student signup (full name, email,
+password, confirmation), sign-in, password visibility, validation, loading/error
+states, session restoration, an account welcome screen, and logout. Native sessions
+use Expo SecureStore through the Better Auth Expo client; web sessions use cookies.
+
+Start the API in one terminal with `bun run dev`, then in another:
+
+```sh
+bun run mobile:web -- --port 8081
+```
+
+Open `http://localhost:8081`. Set `EXPO_PUBLIC_API_URL` in `.env` to the API address
+(default `http://localhost:3000`), set `BETTER_AUTH_URL` to that same API address,
+and include `http://localhost:8081` in `TRUSTED_ORIGINS`. Restart both processes
+when changing environment values. Only `EXPO_PUBLIC_API_URL` is intended for the
+client; never prefix database credentials or auth secrets with `EXPO_PUBLIC_`.
+
+For native preview, run `bun run mobile:start`. Use a reachable LAN API address
+on physical devices and include `sslschool://` in trusted origins. Native device
+session storage still needs an on-device check. Learning availability questions
+and full role dashboards are future work; the welcome screen displays the server's
+assigned role. New users cannot choose their role on the signup form.

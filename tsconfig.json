@@ -15,7 +15,8 @@
     "src",
     "scripts",
     "tests",
-    "prisma.config.ts"
+    "prisma.config.ts",
+    "mobile"
   ],
   "extends": "expo/tsconfig.base"
 }

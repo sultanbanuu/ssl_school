@@ -4,6 +4,9 @@ export class HttpError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 export type Actor = { id: string; role: Role; studentId: string | null; teacherId: string | null };
+export function requireAdmin(actor: Actor) {
+  if (actor.role !== "admin") throw new HttpError(403, "Admin access required");
+}
 export function requireStaff(actor: Actor) {
   if (actor.role !== "admin" && actor.role !== "manager") throw new HttpError(403, "Staff access required");
 }

@@ -7,12 +7,15 @@
     "start": "bun src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
+    "check:school": "bun scripts/check-school-flow.ts",
     "db:generate": "prisma generate",
     "db:validate": "prisma validate",
     "db:migrate": "prisma migrate deploy",
     "db:dev": "prisma migrate dev",
     "account:create": "bun scripts/create-account.ts",
-    "account:reset-password": "bun scripts/reset-password.ts"
+    "account:reset-password": "bun scripts/reset-password.ts",
+    "mobile:start": "expo start",
+    "mobile:web": "expo start --web"
   },
   "dependencies": {
     "@better-auth/expo": "1.7.10",
@@ -23,7 +26,16 @@
     "dotenv": "18.0.8",
     "elysia": "1.4.30",
     "expo": "^58.0.14",
+    "expo-constants": "~58.0.12",
+    "expo-linking": "~58.0.13",
+    "expo-network": "~58.0.3",
+    "expo-secure-store": "~58.0.2",
+    "expo-web-browser": "~58.0.6",
     "pg": "8.23.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-native": "0.88.0",
+    "react-native-web": "^0.21.4",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -32,5 +44,6 @@
     "@types/pg": "8.23.1",
     "prisma": "7.10.1",
     "typescript": "7.0.2"
-  }
+  },
+  "main": "mobile/index.ts"
 }

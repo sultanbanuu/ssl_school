@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "SSL School",
+    "slug": "ssl-school",
+    "scheme": "sslschool",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": ["expo-secure-store"],
+    "web": { "bundler": "metro" }
+  }
+}
