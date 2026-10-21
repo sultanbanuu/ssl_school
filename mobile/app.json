@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "SSL School",
+    "slug": "ssl-school",
+    "scheme": "ssl-school",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "bundleIdentifier": "school.ssl.mobile",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "school.ssl.mobile"
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose a payment receipt to submit to your school.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      "expo-web-browser"
+    ]
+  }
+}

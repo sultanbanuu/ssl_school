@@ -15,11 +15,15 @@ a draft schema reference on 2026-10-16; it is not this application's database.
   scoped list/detail endpoints. See [people management](docs/people-management.md).
 - Zod contracts, bounded pagination, decimal-string money, and safe API errors.
 - SQL constraint tests using disposable PGlite, plus HTTP authorization and auth tests.
+- Monthly payment submissions with private R2 receipts and admin-only review.
+  See [payment flow and R2 setup](docs/payments.md).
 
 This is the first backend milestone, not the complete mobile app. Lesson/progress/
-payment/notification tables exist, but their API routes and screens are still pending.
-Invitation email, password reset email, uploads, scheduling conflict prevention,
-audit trails, deployment, and Expo UI remain on the roadmap.
+notification tables exist, but their API routes and screens are still pending.
+Payment API routes and an Expo payment app are available. See
+[mobile app setup](mobile/README.md) for student submissions/history and admin review.
+Invitation email, password reset email, non-receipt uploads, scheduling conflict prevention,
+audit trails, deployment, and the remaining Expo screens remain on the roadmap.
 
 ## Start locally
 
