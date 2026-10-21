@@ -5,6 +5,7 @@ import { HttpError, courseScope, enrollmentScope, requireStaff, type Actor } fro
 import { createCourseBody, createEnrollmentBody, pagination } from "./contracts";
 import { peopleRoutes } from "./people";
 import { roleRoutes } from "./roles";
+import { lessonRoutes } from "./lessons";
 
 type Dependencies = {
   db: PrismaClient;
@@ -45,6 +46,7 @@ export function createApp({ db, getSession, authHandler, origins }: Dependencies
     .all("/api/auth/*", ({ request }) => authHandler(request))
     .use(peopleRoutes(db, actorFor))
     .use(roleRoutes(db, actorFor))
+    .use(lessonRoutes(db, actorFor))
     .get("/api/me", async ({ request }) => {
       const actor = await actorFor(request);
       return db.profile.findUnique({ where: { id: actor.id }, include: { student: true, teacher: true } });
@@ -62,7 +64,7 @@ export function createApp({ db, getSession, authHandler, origins }: Dependencies
     }, { body: createCourseBody })
     .get("/api/enrollments", async ({ request, query }) => {
       const actor = await actorFor(request);
-      return db.enrollment.findMany({ where: enrollmentScope(actor), take: query.limit, skip: query.offset, orderBy: [{ createdAt: "desc" }, { id: "asc" }] });
+      return db.enrollment.findMany({ where: enrollmentScope(actor), include: { course: { select: { name: true } }, student: { select: { profile: { select: { firstName: true, lastName: true } } } } }, take: query.limit, skip: query.offset, orderBy: [{ createdAt: "desc" }, { id: "asc" }] });
     }, { query: pagination })
     .post("/api/enrollments", async ({ request, body, set }) => {
       requireStaff(await actorFor(request));

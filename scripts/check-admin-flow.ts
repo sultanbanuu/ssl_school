@@ -86,7 +86,7 @@ try {
   if (visible.some((row: { teacherId: string }) => row.teacherId !== teacher.id)) throw new Error("Teacher enrollment list leaked another teacher's records");
   await request("/api/teachers", 403, undefined, studentLogin.cookie);
   await request(`/api/students/${student.id}`, 403, { firstName: "Unauthorized" }, teacherLogin.cookie, "PATCH");
-  await request("/api/lessons", 404, undefined, cookie);
+  await request("/api/lessons", 200, undefined, cookie);
 
   // Exercise the actual operator command without putting passwords in arguments.
   await request("/api/me", 200, undefined, studentLogin.cookie);

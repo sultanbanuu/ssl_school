@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { authClient, getProfile, SessionExpiredError } from "./auth-client";
+import { Lessons } from "./Lessons";
 
 type Profile = Awaited<ReturnType<typeof getProfile>>;
 export default function App() {
@@ -92,7 +93,7 @@ export default function App() {
               <Text style={s.eyebrow}>YOU'RE IN</Text>
               <Text style={s.title}>Hello{profile?.firstName ? `, ${profile.firstName}` : ""}.</Text>
               <Text style={s.subtitle}>{profile ? "Your SSL School account is ready." : "You're signed in. Let's load your profile."}</Text>
-              {profile && <View style={s.account}><Text style={s.label}>YOUR ACCOUNT</Text><Text style={s.accountRole}>{profile.role.charAt(0).toUpperCase() + profile.role.slice(1)}</Text><Text style={s.hint}>Your courses and learning space are coming next.</Text></View>}
+              {profile && <Lessons key={profile.id} role={profile.role} onFailure={handleFailure} />}
               {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}
               {!profile && <Pressable style={s.primary} onPress={restore}><Text style={s.primaryText}>Retry loading profile</Text></Pressable>}
               <Pressable accessibilityRole="button" disabled={busy} onPress={logout} style={s.secondary}><Text style={s.link}>{busy ? "Signing out…" : "Sign out"}</Text></Pressable>

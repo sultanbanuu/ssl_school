@@ -19,9 +19,9 @@ a draft schema reference on 2026-10-16; it is not this application's database.
 - Zod contracts, bounded pagination, decimal-string money, and safe API errors.
 - SQL constraint tests using disposable PGlite, plus HTTP authorization and auth tests.
 
-This is the first backend milestone, not the complete mobile app. Lesson/progress/
-payment/notification tables exist, but their API routes and screens are still pending.
-Invitation email, password reset email, uploads, scheduling conflict prevention,
+This is an early backend milestone with a signed-in lesson scheduling screen.
+Progress/payment/notification tables exist, but their API routes and screens are still pending.
+Invitation email, password reset email, uploads,
 audit trails, deployment, and school dashboard screens remain on the roadmap.
 
 ## Start locally
@@ -194,7 +194,7 @@ See [schema decisions](docs/schema-decisions.md) and [roadmap](docs/roadmap.md).
 
 The Expo app lives in `mobile/`. It provides student signup (full name, email,
 password, confirmation), sign-in, password visibility, validation, loading/error
-states, session restoration, an account welcome screen, and logout. Native sessions
+states, session restoration, a role-scoped lesson schedule, and logout. Native sessions
 use Expo SecureStore through the Better Auth Expo client; web sessions use cookies.
 
 Start the API in one terminal with `bun run dev`, then in another:
@@ -214,3 +214,34 @@ on physical devices and include `sslschool://` in trusted origins. Native device
 session storage still needs an on-device check. Learning availability questions
 and full role dashboards are future work; the welcome screen displays the server's
 assigned role. New users cannot choose their role on the signup form.
+
+## Lesson scheduling
+
+The signed-in Expo screen lists the user's lessons with paging and refresh.
+Students see their own lessons; teachers see their assigned schedules; admins and
+managers see all lessons and can create lessons from existing enrollments.
+Staff and assigned teachers can reschedule, cancel, or mark scheduled lessons
+completed. Completed and cancelled lessons are retained and cannot be changed.
+
+- `GET /api/lessons`: scoped list with `limit`, `offset`, optional `from`/`to`
+  inclusive dates, and `status` (`scheduled`, `completed`, `cancelled`).
+- `POST /api/lessons`: admin/manager only. Body:
+  `{ "enrollmentId": "UUID", "date": "2026-11-02", "startTime": "10:00", "endTime": "11:00" }`.
+- `PATCH /api/lessons/:id`: staff or assigned teacher. Supply either all three
+  date/time fields to reschedule, or `{ "status": "cancelled" }` /
+  `{ "status": "completed" }`.
+
+Dates/times are school-local wall clock values in Asia/Baku, using 24-hour time.
+An end time is required for new bookings and reschedules; lessons cannot cross
+midnight. Teacher IDs are derived from the enrollment. Creation requires an
+active student and course. Overlapping non-cancelled lessons for either the same
+teacher or the same student return 409, including across different enrollments.
+Back-to-back lessons are allowed. Legacy lessons without an end time block the
+remainder of that date from their start time.
+
+All lesson mutations take a PostgreSQL `SHARE ROW EXCLUSIVE` table lock before
+reading availability, inside a `READ COMMITTED` transaction. Concurrent API
+bookings therefore check availability after the previous mutation commits.
+This deliberately serializes schedule writes across the school; revisit lock
+granularity if scheduling volume grows. Direct database writers must use the
+same availability-check protocol; conflict rejection is enforced by the API.
