@@ -7,7 +7,14 @@ export const envSchema = z.object({
   TRUSTED_ORIGINS: z.string().min(1).transform((v) => v.split(",").map((s) => s.trim()).filter(Boolean)),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-});
+  R2_ACCOUNT_ID: z.string().regex(/^[a-f0-9]{32}$/).optional(),
+  R2_ACCESS_KEY_ID: z.string().min(1).optional(),
+  R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  R2_BUCKET: z.string().min(1).optional(),
+}).refine((v) => {
+  const fields = [v.R2_ACCOUNT_ID, v.R2_ACCESS_KEY_ID, v.R2_SECRET_ACCESS_KEY, v.R2_BUCKET];
+  return fields.every(Boolean) || fields.every((field) => field === undefined);
+}, "Set all four R2 variables or leave all unset");
 export type Config = z.infer<typeof envSchema>;
 export function loadConfig() {
   const result = envSchema.safeParse(process.env);

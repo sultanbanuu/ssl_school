@@ -20,6 +20,13 @@ enum LessonStatus {
   scheduled
   completed
   cancelled
+  rescheduled
+}
+
+enum PaymentStatus {
+  pending
+  approved
+  cancelled
 }
 
 model User {
@@ -96,6 +103,7 @@ model Profile {
   manager         Manager?
   admin           Admin?
   notifications   Notification[]
+  reviewedPayments Payment[] @relation("PaymentReviewer")
   @@map("profiles")
 }
 
@@ -112,6 +120,7 @@ model Student {
   enrollments  Enrollment[]
   progress     ProgressRecord[]
   payments     Payment[]
+  paymentUploads PaymentUpload[]
   @@map("students")
 }
 
@@ -155,6 +164,7 @@ model Course {
   teacher     Teacher  @relation(fields: [teacherId], references: [id], onDelete: Restrict)
   enrollments Enrollment[]
   payments    Payment[]
+  paymentUploads PaymentUpload[]
   @@index([teacherId])
   @@map("courses")
 }
@@ -212,13 +222,44 @@ model Payment {
   studentId  String  @map("student_id") @db.Uuid
   courseId   String  @map("course_id") @db.Uuid
   amount     Decimal @db.Decimal(12, 2)
-  status     Boolean @default(false)
-  receiptUrl String  @map("reciept_url")
+  status     PaymentStatus @default(pending)
+  receiptUrl String? @map("reciept_url") // Legacy reference only; never exposed by the API.
+  receiptKey String? @unique @map("receipt_key")
+  uploadId String? @unique @map("upload_id") @db.Uuid
+  upload PaymentUpload? @relation(fields: [uploadId], references: [id], onDelete: Restrict)
+  courseName String? @map("course_name")
+  submittedAt DateTime? @map("submitted_at") @db.Timestamptz(6)
+  startDate DateTime? @map("start_date") @db.Date
+  endDate DateTime? @map("end_date") @db.Date
+  reviewedAt DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  reviewedBy String? @map("reviewed_by") @db.Uuid
+  reviewer Profile? @relation("PaymentReviewer", fields: [reviewedBy], references: [id], onDelete: Restrict)
+  cancellationReason String? @map("cancellation_reason")
   student    Student @relation(fields: [studentId], references: [id], onDelete: Restrict)
   course     Course  @relation(fields: [courseId], references: [id], onDelete: Restrict)
   @@index([studentId])
   @@index([courseId])
+  @@index([studentId, submittedAt])
+  @@index([status, submittedAt])
   @@map("payments")
+}
+
+model PaymentUpload {
+  id String @id @default(uuid()) @db.Uuid
+  studentId String @map("student_id") @db.Uuid
+  courseId String @map("course_id") @db.Uuid
+  objectKey String @unique @map("object_key")
+  contentType String @map("content_type")
+  size Int
+  amount Decimal @db.Decimal(12, 2)
+  courseName String @map("course_name")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  payment Payment?
+  @@index([studentId, createdAt])
+  @@map("payment_uploads")
 }
 
 model Notification {
