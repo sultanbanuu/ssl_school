@@ -6,7 +6,10 @@ import * as ImagePicker from 'expo-image-picker';
 import { File } from 'expo-file-system';
 import { api, ApiError, auth, Course, money, Payment, Profile, Upload } from './src/api';
 
-type Route = { name: 'history' } | { name: 'new' } | { name: 'detail'; id: string };
+import { Notifications } from './src/Notifications';
+import { useNotificationUpdates } from './src/useNotificationUpdates';
+
+type Route = { name: 'notifications' } | { name: 'history' } | { name: 'new' } | { name: 'detail'; id: string };
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Something went wrong. Please try again.';
 const date = (value: string | null) => value ? new Date(value.length === 10 ? `${value}T12:00:00` : value).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 function Button({ title, onPress, disabled, secondary = false }: { title: string; onPress: () => void; disabled?: boolean; secondary?: boolean }) {
@@ -22,6 +25,7 @@ function Notice({ text }: { text: string }) { return text ? <Text accessibilityR
 
 export default function App() {
   const [profile, setProfile] = useState<Profile | null>(null);
+  const notificationUpdates = useNotificationUpdates(profile?.id);
   const [booting, setBooting] = useState(true);
   const [error, setError] = useState('');
   const [route, setRoute] = useState<Route>({ name: 'history' });
@@ -32,11 +36,13 @@ export default function App() {
   const goHome = () => { setRevision(v => v + 1); setRoute({ name: 'history' }); };
   return <SafeAreaProvider><SafeAreaView style={s.safe}><StatusBar style="dark" /><KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <View style={s.header}><View style={s.brand}><View style={s.logo}><Text style={s.logoText}>S</Text></View><View><Text style={s.brandName}>SSL SCHOOL</Text><Text style={s.small}>A little progress, every day.</Text></View></View>{profile && <Pressable accessibilityRole="button" onPress={async () => { try { const result = await auth.signOut(); if (result.error) throw new Error(result.error.message); setProfile(null); goHome(); } catch (e) { setError(errorMessage(e)); } }}><Text style={s.link}>Sign out</Text></Pressable>}</View>
+    {profile && <View style={[s.row, { paddingHorizontal: 24, paddingTop: 12 }]}><Pressable accessibilityRole="button" onPress={goHome}><Text style={s.link}>Payments</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Notifications" accessibilityHint={`${notificationUpdates.count} unread notifications`} onPress={() => { notificationUpdates.dismiss(); setRoute({ name: 'notifications' }); }} style={{ position: 'relative', paddingRight: 10 }}><Text style={s.link}>Notifications</Text>{notificationUpdates.count > 0 && <View testID="notification-badge" style={s.notificationBadge}><Text style={s.notificationBadgeText}>{notificationUpdates.count > 99 ? '99+' : notificationUpdates.count}</Text></View>}</Pressable></View>}
     <Notice text={error} />
-    {booting ? <ActivityIndicator style={s.loading} color="#255d47" /> : !profile ? <Login onLogin={loadProfile} /> : !['student', 'admin'].includes(profile.role) ? <View style={s.content}><Text style={s.title}>Payments are private.</Text><Text style={s.muted}>This section is available to students and administrators. Your account is a {profile.role}.</Text></View> : route.name === 'history' ? <History key={revision} profile={profile} open={id => setRoute({ name: 'detail', id })} create={() => setRoute({ name: 'new' })} /> : <>
+    {booting ? <ActivityIndicator style={s.loading} color="#255d47" /> : !profile ? <Login onLogin={loadProfile} /> : route.name === 'notifications' ? <Notifications key={profile.id} profile={profile} onCount={notificationUpdates.syncCount} /> : !['student', 'admin'].includes(profile.role) ? <View style={s.content}><Text style={s.title}>Payments are private.</Text><Text style={s.muted}>This section is available to students and administrators. Your account is a {profile.role}.</Text></View> : route.name === 'history' ? <History key={revision} profile={profile} open={id => setRoute({ name: 'detail', id })} create={() => setRoute({ name: 'new' })} /> : <>
       <Pressable accessibilityRole="button" onPress={goHome} style={s.back}><Text style={s.link}>‹  Back to payments</Text></Pressable>
       {route.name === 'new' ? <NewPayment done={id => setRoute({ name: 'detail', id })} /> : <Detail id={route.id} admin={profile.role === 'admin'} />}
     </>}
+    {profile && notificationUpdates.banner && route.name !== 'notifications' && <View accessibilityLiveRegion="polite" style={s.floatingNotification} testID="floating-notification"><Pressable accessibilityRole="button" accessibilityLabel="Open new notification" style={{ flex: 1, gap: 5 }} onPress={() => { notificationUpdates.dismiss(); setRoute({ name: 'notifications' }); }}><Text style={s.floatingLabel}>NEW SCHOOL UPDATE</Text><Text numberOfLines={1} style={s.floatingTitle}>{notificationUpdates.banner.title}</Text><Text numberOfLines={2} style={s.floatingBody}>{notificationUpdates.banner.message}</Text><Text style={s.floatingLabel}>View notifications →</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Dismiss notification" onPress={notificationUpdates.dismiss} style={{ padding: 12 }}><Text style={s.floatingTitle}>×</Text></Pressable></View>}
   </KeyboardAvoidingView></SafeAreaView></SafeAreaProvider>;
 }
 
@@ -118,6 +124,8 @@ function Detail({ id, admin }: { id: string; admin: boolean }) {
 }
 
 const s = StyleSheet.create({
+  notificationBadge: { position: 'absolute', top: -9, right: -8, backgroundColor: '#ad423b', borderRadius: 12, minWidth: 22, minHeight: 22, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center' }, notificationBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  floatingNotification: { position: 'absolute', top: 12, left: 16, right: 16, maxWidth: 620, alignSelf: 'center', backgroundColor: '#204e3e', borderRadius: 18, padding: 18, flexDirection: 'row', gap: 8, elevation: 8, shadowColor: '#102d22', shadowOpacity: 0.2, shadowRadius: 14, shadowOffset: { width: 0, height: 5 }, zIndex: 20 }, floatingLabel: { fontSize: 11, color: '#d2e6ab', fontWeight: '700' }, floatingTitle: { fontSize: 17, color: '#fff', fontWeight: '700' }, floatingBody: { fontSize: 14, lineHeight: 20, color: '#e1eae4' },
   flex: { flex: 1 }, safe: { flex: 1, backgroundColor: '#f7f8f4' }, loading: { flex: 1 },
   header: { padding: 22, borderBottomWidth: 1, borderColor: '#e5e9e2', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, brand: { flexDirection: 'row', alignItems: 'center', gap: 10 }, logo: { width: 38, height: 42, borderRadius: 12, backgroundColor: '#255d47', alignItems: 'center', justifyContent: 'center' }, logoText: { color: '#f1f8dc', fontSize: 27, fontWeight: '800' }, brandName: { fontSize: 13, fontWeight: '800', letterSpacing: 2, color: '#233f36' },
   content: { padding: 24, gap: 18, paddingBottom: 48, width: '100%', maxWidth: 680, alignSelf: 'center' }, back: { paddingHorizontal: 24, paddingTop: 18 }, eyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 2, color: '#617569', marginTop: 8 }, title: { fontSize: 36, fontWeight: '700', letterSpacing: -1.4, color: '#183f31' }, muted: { fontSize: 15, color: '#68766e', lineHeight: 23 }, small: { fontSize: 12, color: '#748178', lineHeight: 19 }, body: { fontSize: 15, color: '#233f36', lineHeight: 22 }, link: { fontSize: 13, color: '#255d47', fontWeight: '700', paddingVertical: 5 },

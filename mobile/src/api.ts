@@ -16,7 +16,7 @@ export async function api<T>(path: string, body?: unknown, method = 'POST'): Pro
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   let response: Response;
   try {
-    response = await fetch(`${baseURL}/api${path}`, { method: body === undefined ? 'GET' : method, headers, credentials: 'include', body: body === undefined ? undefined : JSON.stringify(body) });
+    response = await fetch(`${baseURL}/api${path}`, { method: body === undefined ? 'GET' : method, headers, credentials: Platform.OS === 'web' ? 'include' : 'omit', body: body === undefined ? undefined : JSON.stringify(body) });
   } catch {
     throw new Error('The school server could not be reached. Check your connection and try again.');
   }

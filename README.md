@@ -18,8 +18,10 @@ a draft schema reference on 2026-10-16; it is not this application's database.
 - Monthly payment submissions with private R2 receipts and admin-only review.
   See [payment flow and R2 setup](docs/payments.md).
 
-This is the first backend milestone, not the complete mobile app. Lesson/progress/
-notification tables exist, but their API routes and screens are still pending.
+This is the first backend milestone, not the complete mobile app. Lesson/progress
+tables exist, but their API routes and screens are still pending.
+In-app notification inboxes and admin/manager announcements are available for all
+roles. See [notifications](docs/notifications.md).
 Payment API routes and an Expo payment app are available. See
 [mobile app setup](mobile/README.md) for student submissions/history and admin review.
 Invitation email, password reset email, non-receipt uploads, scheduling conflict prevention,

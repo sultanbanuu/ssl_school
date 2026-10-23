@@ -5,6 +5,7 @@ import { HttpError, courseScope, enrollmentScope, requireStaff, type Actor } fro
 import { createCourseBody, createEnrollmentBody, pagination } from "./contracts";
 import { peopleRoutes } from "./people";
 import { paymentRoutes } from "./payments";
+import { notificationRoutes } from "./notifications";
 import type { ReceiptStorage } from "./receipt-storage";
 
 type Dependencies = {
@@ -47,6 +48,7 @@ export function createApp({ db, getSession, authHandler, origins, receipts }: De
     .all("/api/auth/*", ({ request }) => authHandler(request))
     .use(peopleRoutes(db, actorFor))
     .use(paymentRoutes(db, actorFor, receipts))
+    .use(notificationRoutes(db, actorFor))
     .get("/api/me", async ({ request }) => {
       const actor = await actorFor(request);
       return db.profile.findUnique({ where: { id: actor.id }, include: { student: true, teacher: true } });

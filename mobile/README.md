@@ -1,10 +1,13 @@
 # SSL School payment app
 
-Expo SDK 55 app for iOS, Android, and web. Uses the existing API and Better Auth
+Expo SDK 57 app for iOS, Android, and web. Uses the existing API and Better Auth
 accounts. Includes sign-in, student history and receipt submission, payment detail,
 and admin approval/cancellation. Managers and teachers see an access explanation.
 
 ## Run
+
+Use Node.js 22.13 or newer in the 22.x release line. SDK 57 requires iOS 16.4
+or later; rebuild any existing native development client after this upgrade.
 
 ```sh
 cd mobile
