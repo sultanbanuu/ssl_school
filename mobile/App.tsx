@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { authClient, getProfile, SessionExpiredError } from "./auth-client";
-import { Lessons } from "./Lessons";
+import { SchoolApp } from "./SchoolApp";
 
 type Profile = Awaited<ReturnType<typeof getProfile>>;
 export default function App() {
@@ -74,6 +74,8 @@ export default function App() {
   }
   function switchMode() { setMode(signup ? "signin" : "signup"); setError(""); setPassword(""); setConfirm(""); }
 
+  if (!checking && signedIn && profile) return <SchoolApp profile={profile} onSignOut={logout} busy={busy} error={error} onFailure={handleFailure} />;
+
   return <KeyboardAvoidingView style={s.page} behavior={Platform.OS === "ios" ? "padding" : undefined}>
     <StatusBar barStyle="dark-content" />
     <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
@@ -93,7 +95,6 @@ export default function App() {
               <Text style={s.eyebrow}>YOU'RE IN</Text>
               <Text style={s.title}>Hello{profile?.firstName ? `, ${profile.firstName}` : ""}.</Text>
               <Text style={s.subtitle}>{profile ? "Your SSL School account is ready." : "You're signed in. Let's load your profile."}</Text>
-              {profile && <Lessons key={profile.id} role={profile.role} onFailure={handleFailure} />}
               {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}
               {!profile && <Pressable style={s.primary} onPress={restore}><Text style={s.primaryText}>Retry loading profile</Text></Pressable>}
               <Pressable accessibilityRole="button" disabled={busy} onPress={logout} style={s.secondary}><Text style={s.link}>{busy ? "Signing out…" : "Sign out"}</Text></Pressable>

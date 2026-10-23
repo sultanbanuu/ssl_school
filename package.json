@@ -15,11 +15,16 @@
     "account:create": "bun scripts/create-account.ts",
     "account:reset-password": "bun scripts/reset-password.ts",
     "mobile:start": "expo start",
-    "mobile:web": "expo start --web"
+    "mobile:web": "expo start --web",
+    "test:notifications:ui": "bun scripts/test-notification-ui.ts",
+    "mobile:export": "expo export --platform web --output-dir mobile/dist-notification-review"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1153.0",
+    "@aws-sdk/s3-request-presigner": "3.1152.0",
     "@better-auth/expo": "1.7.10",
     "@elysiajs/cors": "1.4.2",
+    "@expo/metro-runtime": "~58.0.15",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
     "better-auth": "1.7.10",
@@ -27,14 +32,18 @@
     "elysia": "1.4.30",
     "expo": "^58.0.14",
     "expo-constants": "~58.0.12",
+    "expo-file-system": "~58.0.10",
+    "expo-image-picker": "~58.0.10",
     "expo-linking": "~58.0.13",
     "expo-network": "~58.0.3",
     "expo-secure-store": "~58.0.2",
+    "expo-status-bar": "~58.0.4",
     "expo-web-browser": "~58.0.6",
     "pg": "8.23.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-native": "0.88.0",
+    "react-native-safe-area-context": "~5.10.1",
     "react-native-web": "^0.21.4",
     "zod": "^4.6.7"
   },
@@ -43,7 +52,8 @@
     "@types/bun": "1.4.3",
     "@types/pg": "8.23.1",
     "prisma": "7.10.1",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "playwright": "1.62.1"
   },
   "main": "mobile/index.ts"
 }

@@ -27,7 +27,12 @@ afterAll(async () => { await db.close(); });
 
 test("migrations recreate all school and authentication tables", async () => {
   const result = await db.query<{ count: number }>("SELECT count(*)::int AS count FROM pg_tables WHERE schemaname='public'");
-  expect(result.rows[0].count).toBe(15);
+  expect(result.rows[0].count).toBe(16);
+});
+
+test("lesson status accepts rescheduled after migrations", async () => {
+  const result = await db.query<{ status: string }>(`SELECT 'rescheduled'::"LessonStatus" AS status`);
+  expect(result.rows[0].status).toBe("rescheduled");
 });
 test("duplicate student/course enrollment is rejected by PostgreSQL", async () => {
   const insert = () => db.query("INSERT INTO enrollments (id, student_id, course_id, teacher_id) VALUES ($1, $2, $3, $4)", [crypto.randomUUID(), studentId, courseId, teacherId]);
@@ -42,6 +47,30 @@ test("payment cannot reference a missing course", async () => {
 });
 test("negative payments fail at database layer", async () => {
   await expect(db.query("INSERT INTO payments (id, student_id, course_id, amount, reciept_url) VALUES ($1, $2, $3, -10, 'private-key')", [crypto.randomUUID(), studentId, courseId])).rejects.toThrow(/check constraint/);
+});
+
+test("new payments enforce one pending per course and complete review metadata", async () => {
+  const paymentId = crypto.randomUUID();
+  const uploadId = crypto.randomUUID();
+  const nextUploadId = crypto.randomUUID();
+  for (const key of [uploadId, nextUploadId]) {
+    await db.query(`INSERT INTO payment_uploads (id, student_id, course_id, object_key, content_type, size, amount, course_name, expires_at)
+      VALUES ($1, $2, $3, $4, 'image/png', 8, 50, 'English', now() + interval '15 minutes')`, [key, studentId, courseId, `staging/${key}`]);
+  }
+  const insert = (pid: string, uid: string) => db.query(`INSERT INTO payments
+    (id, student_id, course_id, amount, receipt_key, upload_id, course_name, submitted_at)
+    VALUES ($1, $2, $3, 50, $4, $5, 'English', now())`, [pid, studentId, courseId, `receipts/${pid}`, uid]);
+  await insert(paymentId, uploadId);
+  expect((await db.query<{ status: string }>("SELECT status FROM payments WHERE id = $1", [paymentId])).rows[0].status).toBe("pending");
+  await expect(insert(crypto.randomUUID(), nextUploadId)).rejects.toThrow(/unique constraint/);
+  await expect(db.query("UPDATE payments SET status = 'approved' WHERE id = $1", [paymentId])).rejects.toThrow(/check constraint/);
+  await expect(db.query("UPDATE payments SET status = 'cancelled' WHERE id = $1", [paymentId])).rejects.toThrow(/check constraint/);
+  await db.query("UPDATE payments SET status = 'approved', reviewed_at = now(), reviewed_by = $2, start_date = '2026-10-19', end_date = '2026-11-19' WHERE id = $1", [paymentId, studentProfile]);
+  const nextPaymentId = crypto.randomUUID();
+  await insert(nextPaymentId, nextUploadId);
+  await db.query("UPDATE payments SET status = 'cancelled', reviewed_at = now(), reviewed_by = $2 WHERE id = $1", [nextPaymentId, studentProfile]);
+  const saved = await db.query<{ status: string; reviewed_by: string }>("SELECT status, reviewed_by FROM payments WHERE id = $1 AND student_id = $2", [nextPaymentId, studentId]);
+  expect(saved.rows[0]).toEqual({ status: "cancelled", reviewed_by: studentProfile });
 });
 test("every application table enables row-level security", async () => {
   const result = await db.query("SELECT tablename FROM pg_tables WHERE schemaname='public' AND NOT rowsecurity");

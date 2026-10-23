@@ -6,15 +6,19 @@ import { createCourseBody, createEnrollmentBody, pagination } from "./contracts"
 import { peopleRoutes } from "./people";
 import { roleRoutes } from "./roles";
 import { lessonRoutes } from "./lessons";
+import { paymentRoutes } from "./payments";
+import { notificationRoutes } from "./notifications";
+import type { ReceiptStorage } from "./receipt-storage";
 
 type Dependencies = {
   db: PrismaClient;
   getSession: (headers: Headers) => Promise<{ user: { id: string } } | null>;
   authHandler: (request: Request) => Promise<Response>;
   origins: string[];
+  receipts?: ReceiptStorage;
 };
 
-export function createApp({ db, getSession, authHandler, origins }: Dependencies) {
+export function createApp({ db, getSession, authHandler, origins, receipts }: Dependencies) {
   async function actorFor(request: Request): Promise<Actor> {
     const session = await getSession(request.headers);
     if (!session) throw new HttpError(401, "Authentication required");
@@ -47,6 +51,8 @@ export function createApp({ db, getSession, authHandler, origins }: Dependencies
     .use(peopleRoutes(db, actorFor))
     .use(roleRoutes(db, actorFor))
     .use(lessonRoutes(db, actorFor))
+    .use(paymentRoutes(db, actorFor, receipts))
+    .use(notificationRoutes(db, actorFor))
     .get("/api/me", async ({ request }) => {
       const actor = await actorFor(request);
       return db.profile.findUnique({ where: { id: actor.id }, include: { student: true, teacher: true } });

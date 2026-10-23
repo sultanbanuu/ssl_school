@@ -19,10 +19,12 @@ a draft schema reference on 2026-10-16; it is not this application's database.
 - Zod contracts, bounded pagination, decimal-string money, and safe API errors.
 - SQL constraint tests using disposable PGlite, plus HTTP authorization and auth tests.
 
-This is an early backend milestone with a signed-in lesson scheduling screen.
-Progress/payment/notification tables exist, but their API routes and screens are still pending.
-Invitation email, password reset email, uploads,
-audit trails, deployment, and school dashboard screens remain on the roadmap.
+The app combines signup/sign-in, role-scoped lesson scheduling, monthly payment
+submissions with private R2 receipts and admin review, and in-app notification
+inboxes with staff announcements. See [payments](docs/payments.md),
+[notifications](docs/notifications.md), and [mobile setup](mobile/README.md).
+Progress tracking, invitation email, password reset email, non-receipt uploads,
+audit trails, deployment, and full management dashboards remain on the roadmap.
 
 ## Start locally
 
