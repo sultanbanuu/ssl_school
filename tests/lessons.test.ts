@@ -13,10 +13,11 @@ function fixture(role: Role | null = "admin", options: { conflict?: boolean; sta
   const enrollment = { id: enrollmentId, studentId, teacherId, student: { status: options.active === false ? "inactive" : "active" }, course: { active: true } };
   const lesson = { id, enrollmentId, teacherId, enrollment, date: new Date("2026-11-02T00:00:00Z"), startTime: new Date("1970-01-01T10:00:00Z"), endTime: new Date("1970-01-01T11:00:00Z"), status: options.status ?? "scheduled" };
   const tx = {
+    trialRequest: { findFirst: async () => null },
     $executeRaw: async () => { calls.push({ name: "lock" }); return 0; },
     enrollment: { findUnique: async () => options.missing ? null : enrollment },
     lesson: {
-      findMany: async (args: any) => { calls.push({ name: "list", args }); return [lesson]; },
+      findMany: async (args: any) => { calls.push({ name: "list", args }); return args.where.OR ? (options.conflict ? [lesson] : []) : [lesson]; },
       findFirst: async (args: any) => { calls.push({ name: "find", args }); return args.where.id === id ? (options.missing ? null : lesson) : options.conflict ? lesson : null; },
       create: async (args: any) => { calls.push({ name: "create", args }); return { ...lesson, ...args.data }; },
       update: async (args: any) => { calls.push({ name: "update", args }); return { ...lesson, ...args.data }; },
@@ -36,17 +37,32 @@ describe("lesson access", () => {
   test("student and teacher schedules are scoped and times serialize without UTC shifting", async () => {
     for (const role of ["student", "teacher"] as const) {
       const f = fixture(role); const response = await f.request(); expect(response.status).toBe(200);
-      expect(f.calls[0].args.where).toEqual({ enrollment: role === "student" ? { studentId } : { teacherId } });
+      expect(f.calls[0].args.where).toEqual(role === "student" ? { enrollment: { studentId, course: { payments: { some: { studentId, status: "approved" } } } } } : { teacherId });
       expect((await response.json())[0]).toMatchObject({ date: body.date, startTime: "10:00", endTime: "11:00" });
     }
   });
-  test("students and teachers cannot create lessons; students cannot modify lessons", async () => {
-    for (const role of ["student", "teacher"] as const) expect((await fixture(role).request("POST", body)).status).toBe(403);
+  test("students cannot create or modify lessons", async () => {
+    expect((await fixture("student").request("POST", body)).status).toBe(403);
     expect((await fixture("student").request("PATCH", { status: "completed" }, `/api/lessons/${id}`)).status).toBe(403);
+  });
+  test("payment approval is required even with student schedule filters and pagination", async () => {
+    const f = fixture("student");
+    expect((await f.request("GET", undefined, "/api/lessons?status=scheduled&from=2026-11-01&to=2026-11-30&limit=1&offset=1")).status).toBe(200);
+    expect(f.calls[0].args).toMatchObject({
+      where: { enrollment: { studentId, course: { payments: { some: { studentId, status: "approved" } } } }, status: "scheduled" },
+      take: 1, skip: 1,
+    });
+  });
+  test("staff schedules remain visible without payment approval", async () => {
+    for (const role of ["admin", "manager"] as const) {
+      const f = fixture(role);
+      expect((await f.request()).status).toBe(200);
+      expect(f.calls[0].args.where).toEqual({ enrollment: {} });
+    }
   });
   test("teacher updates require assigned ownership and missing lessons return 404", async () => {
     const f = fixture("teacher", { missing: true }); expect((await f.request("PATCH", { status: "cancelled" }, `/api/lessons/${id}`)).status).toBe(404);
-    expect(f.calls.find(c => c.name === "find")?.args.where).toEqual({ id, enrollment: { teacherId } });
+    expect(f.calls.find(c => c.name === "find")?.args.where).toEqual({ id, teacherId });
   });
   test("filters are validated", async () => {
     const f = fixture();
@@ -54,13 +70,18 @@ describe("lesson access", () => {
   });
 });
 describe("lesson mutations", () => {
+  test("teachers can schedule enrolled students without a payment", async () => {
+    const f = fixture("teacher");
+    expect((await f.request("POST", body)).status).toBe(201);
+    expect(f.calls.find(c => c.name === "create")?.args.data).toMatchObject({ enrollmentId, teacherId });
+  });
   test("staff create lessons with the enrollment teacher and lock before checking conflicts", async () => {
     for (const role of ["admin", "manager"] as const) {
       const f = fixture(role); expect((await f.request("POST", body)).status).toBe(201);
-      expect(f.calls.map(c => c.name)).toEqual(["transaction", "lock", "find", "create"]);
-      expect(f.calls[0].args).toEqual({ isolationLevel: "ReadCommitted" });
+      expect(f.calls.map(c => c.name)).toEqual(["transaction", "lock", "list", "create"]);
+      expect(f.calls[0].args).toMatchObject({ isolationLevel: "ReadCommitted" });
       expect(f.calls[3].args.data.teacherId).toBe(teacherId);
-      expect(f.calls[2].args.where).toMatchObject({ status: { not: "cancelled" }, OR: [{ teacherId }, { enrollment: { studentId } }], startTime: { lt: new Date("1970-01-01T11:00:00Z") }, AND: [{ OR: [{ endTime: { gt: new Date("1970-01-01T10:00:00Z") } }, { endTime: null }] }] });
+      expect(f.calls[2].args.where).toMatchObject({ status: { notIn: ["cancelled", "rescheduled"] }, OR: [{ teacherId }, { enrollment: { studentId } }] });
     }
   });
   test("conflicting creates and reschedules return 409 without writes", async () => {
@@ -71,7 +92,7 @@ describe("lesson mutations", () => {
   });
   test("reschedules exclude themselves from the conflict query", async () => {
     const f = fixture("teacher"); expect((await f.request("PATCH", { date: body.date, startTime: "11:00", endTime: "12:00" }, `/api/lessons/${id}`)).status).toBe(200);
-    expect(f.calls.filter(c => c.name === "find")[1].args.where.id).toEqual({ not: id });
+    expect(f.calls.find(c => c.name === "list")?.args.where.id).toEqual({ notIn: [id] });
   });
   test("cancel and complete scheduled lessons", async () => {
     for (const status of ["cancelled", "completed"]) {
@@ -86,7 +107,7 @@ describe("lesson mutations", () => {
     for (const options of [{ missing: true }, { active: false }]) expect((await fixture("admin", options).request("POST", body)).status).toBe(422);
   });
   test("reject invalid dates, missing ends, reversed ranges, overrides, and mixed mutations", async () => {
-    for (const data of [{ ...body, date: "2026-02-30" }, { ...body, endTime: undefined }, { ...body, endTime: "09:00" }, { ...body, endTime: "10:00" }, { ...body, teacherId }]) expect((await fixture().request("POST", data)).status).toBe(422);
+    for (const data of [{ ...body, date: "2026-02-30" }, { ...body, endTime: undefined }, { ...body, endTime: "09:00" }, { ...body, endTime: "10:00" }, { ...body, teacherId: "invalid" }]) expect((await fixture().request("POST", data)).status).toBe(422);
     expect((await fixture().request("PATCH", { date: body.date, startTime: "10:00", endTime: "11:00", status: "completed" }, `/api/lessons/${id}`)).status).toBe(422);
   });
 });

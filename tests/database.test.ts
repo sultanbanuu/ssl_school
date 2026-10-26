@@ -27,12 +27,25 @@ afterAll(async () => { await db.close(); });
 
 test("migrations recreate all school and authentication tables", async () => {
   const result = await db.query<{ count: number }>("SELECT count(*)::int AS count FROM pg_tables WHERE schemaname='public'");
-  expect(result.rows[0].count).toBe(16);
+  expect(result.rows[0].count).toBe(18);
 });
 
 test("lesson status accepts rescheduled after migrations", async () => {
   const result = await db.query<{ status: string }>(`SELECT 'rescheduled'::"LessonStatus" AS status`);
   expect(result.rows[0].status).toBe("rescheduled");
+});
+
+test("calendar migration permits overnight lessons but rejects reversed ranges and invalid reminders", async () => {
+  const enrollmentId = crypto.randomUUID();
+  // A separate enrollment avoids coupling this test to the duplicate-enrollment test.
+  const calendarCourse = crypto.randomUUID();
+  await db.query("INSERT INTO courses (id, name, category, price, teacher_id, updated_at) VALUES ($1, 'Calendar', 'General', 50, $2, now())", [calendarCourse, teacherId]);
+  await db.query("INSERT INTO enrollments (id, student_id, course_id, teacher_id) VALUES ($1, $2, $3, $4)", [enrollmentId, studentId, calendarCourse, teacherId]);
+  const insert = (end: string, reminder = 0) => db.query("INSERT INTO lessons (id, enrollment_id, teacher_id, date, end_date, start_time, end_time, reminder_minutes) VALUES ($1, $2, $3, '2026-11-02', $4, '23:00', '01:00', $5)", [crypto.randomUUID(), enrollmentId, teacherId, end, reminder]);
+  await insert("2026-11-03");
+  await expect(insert("2026-11-02")).rejects.toThrow(/check constraint/);
+  await expect(insert("2026-11-01")).rejects.toThrow(/check constraint/);
+  await expect(insert("2026-11-03", -1)).rejects.toThrow(/check constraint/);
 });
 test("duplicate student/course enrollment is rejected by PostgreSQL", async () => {
   const insert = () => db.query("INSERT INTO enrollments (id, student_id, course_id, teacher_id) VALUES ($1, $2, $3, $4)", [crypto.randomUUID(), studentId, courseId, teacherId]);
@@ -75,6 +88,21 @@ test("new payments enforce one pending per course and complete review metadata",
 test("every application table enables row-level security", async () => {
   const result = await db.query("SELECT tablename FROM pg_tables WHERE schemaname='public' AND NOT rowsecurity");
   expect(result.rows).toHaveLength(0);
+});
+
+test("trial reservations enforce a single holder per slot and release on cancellation", async () => {
+  const slot = crypto.randomUUID(), secondProfile = crypto.randomUUID(), secondStudent = crypto.randomUUID();
+  await db.query('INSERT INTO auth_users (id, name, email, "updatedAt") VALUES ($1, \'Trial student\', $2, now())', [secondProfile, `${secondProfile}@example.test`]);
+  await db.query("INSERT INTO profiles (id, role, updated_at) VALUES ($1, 'student', now())", [secondProfile]);
+  await db.query("INSERT INTO students (id, profile_id) VALUES ($1, $2)", [secondStudent, secondProfile]);
+  await db.query("INSERT INTO availability_slots (id, teacher_id, course_id, starts_at, ends_at) VALUES ($1, $2, $3, '2099-01-05T08:00:00Z', '2099-01-05T09:00:00Z')", [slot, teacherId, courseId]);
+  const first = crypto.randomUUID();
+  await db.query("INSERT INTO trial_requests (id, slot_id, student_id, updated_at) VALUES ($1, $2, $3, now())", [first, slot, studentId]);
+  const insert = () => db.query("INSERT INTO trial_requests (id, slot_id, student_id, status, updated_at) VALUES ($1, $2, $3, 'approved', now())", [crypto.randomUUID(), slot, secondStudent]);
+  await expect(insert()).rejects.toThrow(/trial_requests_reserved_slot/);
+  await db.query("UPDATE trial_requests SET status='cancelled' WHERE id=$1", [first]);
+  await insert();
+  await expect(db.query("UPDATE trial_requests SET status='invalid' WHERE id=$1", [first])).rejects.toThrow(/check constraint/);
 });
 test("an unprivileged role cannot read school records even with SELECT grants", async () => {
   await db.exec("CREATE ROLE school_reader; GRANT USAGE ON SCHEMA public TO school_reader; GRANT SELECT ON ALL TABLES IN SCHEMA public TO school_reader; SET ROLE school_reader;");

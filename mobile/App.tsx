@@ -2,11 +2,15 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { authClient, getProfile, SessionExpiredError } from "./auth-client";
 import { SchoolApp } from "./SchoolApp";
+import { birthDateSchema, learningTimeOptions, learningTimeSchema } from "../src/signup";
 
 type Profile = Awaited<ReturnType<typeof getProfile>>;
 export default function App() {
   const [mode, setMode] = useState<"signup" | "signin">("signup");
   const [name, setName] = useState("");
+  const [surname, setSurname] = useState("");
+  const [birthDate, setBirthDate] = useState("");
+  const [learningTime, setLearningTime] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -46,13 +50,16 @@ export default function App() {
     setError("");
     const cleanEmail = email.trim().toLowerCase();
     if (signup && (!name.trim() || name.trim().length > 160)) return setError("Enter your name (up to 160 characters).");
+    if (signup && (!surname.trim() || surname.trim().length > 160)) return setError("Enter your surname (up to 160 characters).");
+    if (signup && !birthDateSchema.safeParse(birthDate).success) return setError("Enter a valid birth date in YYYY-MM-DD format that is not in the future.");
+    if (signup && !learningTimeSchema.safeParse(learningTime).success) return setError("Choose how many hours you can spend learning.");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) return setError("Enter a valid email address.");
     if (password.length < 12 || password.length > 128) return setError("Use a password between 12 and 128 characters.");
     if (signup && password !== confirm) return setError("Your passwords don't match.");
     setBusy(true);
     try {
       const result = signup
-        ? await authClient.signUp.email({ name: name.trim(), email: cleanEmail, password })
+        ? await authClient.signUp.email({ name: `${name.trim()} ${surname.trim()}`, firstName: name.trim(), lastName: surname.trim(), birthDate, learningTime, email: cleanEmail, password })
         : await authClient.signIn.email({ email: cleanEmail, password });
       if (result.error) {
         setError(result.error.status === 429 ? "Too many attempts. Please wait a moment and try again." : result.error.message || "Unable to sign in. Please try again.");
@@ -102,7 +109,15 @@ export default function App() {
               <Text style={s.eyebrow}>YOUR LEARNING JOURNEY</Text>
               <Text style={s.title}>{signup ? "Start something good." : "Welcome back."}</Text>
               <Text style={s.subtitle}>{signup ? "Create your student account. We'll take it from here." : "Sign in and take your next step."}</Text>
-              {signup && <Field label="Full name" value={name} onChangeText={setName} placeholder="Your name" autoComplete="name" editable={!busy} />}
+              {signup && <>
+                <Field label="Name" value={name} onChangeText={setName} placeholder="Your name" autoComplete="given-name" editable={!busy} maxLength={160} />
+                <Field label="Surname" value={surname} onChangeText={setSurname} placeholder="Your surname" autoComplete="family-name" editable={!busy} maxLength={160} />
+                <Field label="Birth date (YYYY-MM-DD)" value={birthDate} onChangeText={setBirthDate} placeholder="YYYY-MM-DD" autoCapitalize="none" editable={!busy} maxLength={10} />
+                <View accessibilityRole="radiogroup" accessibilityLabel="How many hours can you spend learning?">
+                  <Text style={s.label}>How many hours can you spend learning?</Text>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>{learningTimeOptions.map(option => <Pressable key={option} accessibilityRole="radio" accessibilityState={{ checked: learningTime === option, disabled: busy }} disabled={busy} onPress={() => setLearningTime(option)} style={[s.input, learningTime === option && { backgroundColor: "#e1eee6", borderColor: "#245e50" }]}><Text style={{ color: "#203d33" }}>{option}</Text></Pressable>)}</View>
+                </View>
+              </>}
               <Field label="Email address" value={email} onChangeText={setEmail} placeholder="you@example.com" autoComplete="email" keyboardType="email-address" autoCapitalize="none" editable={!busy} />
               <View><View style={s.passwordLabel}><Text style={s.label}>Password</Text><Pressable accessibilityRole="button" accessibilityLabel={visible ? "Hide password" : "Show password"} onPress={() => setVisible(!visible)}><Text style={s.link}>{visible ? "Hide" : "Show"}</Text></Pressable></View><TextInput accessibilityLabel="Password" style={s.input} value={password} onChangeText={setPassword} placeholder="Enter your password" placeholderTextColor="#929a97" secureTextEntry={!visible} autoCapitalize="none" autoCorrect={false} autoComplete={signup ? "new-password" : "current-password"} editable={!busy} maxLength={128} />{signup && <Text style={s.hint}>Use 12–128 characters.</Text>}</View>
               {signup && <Field label="Confirm password" value={confirm} onChangeText={setConfirm} placeholder="Enter your password again" secureTextEntry={!visible} autoComplete="new-password" autoCapitalize="none" editable={!busy} maxLength={128} />}

@@ -2,11 +2,18 @@ import { createAuthClient } from "better-auth/react";
 import { expoClient } from "@better-auth/expo/client";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
+import Constants from "expo-constants";
+import { inferAdditionalFields } from "better-auth/client/plugins";
+import type { createAuth } from "../src/auth";
 
-export const apiURL = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:3000";
+// On a physical phone localhost is the phone, not the development computer.
+const developmentHost = __DEV__ && Platform.OS !== "web" && Constants.expoConfig?.hostUri
+  ? new URL(`http://${Constants.expoConfig.hostUri}`).hostname
+  : "localhost";
+export const apiURL = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "") || `http://${developmentHost}:3000`;
 export const authClient = createAuthClient({
   baseURL: apiURL,
-  plugins: [expoClient({ scheme: "sslschool", storagePrefix: "ssl-school", storage: SecureStore })],
+  plugins: [inferAdditionalFields<ReturnType<typeof createAuth>>(), expoClient({ scheme: "sslschool", storagePrefix: "ssl-school", storage: SecureStore })],
 });
 export class SessionExpiredError extends Error {}
 

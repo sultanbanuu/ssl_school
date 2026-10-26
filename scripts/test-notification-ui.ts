@@ -231,7 +231,7 @@ async function fixture(
   for (const role of ["student", "teacher", "manager", "admin"] as const)
     await test(`${role} restores one session across lessons, payments and notifications`, async () => {
       const { page, state, close } = await fixture(role, 390, [], false);
-      await page.getByText(role === "teacher" ? "Your teaching schedule" : role === "student" ? "Your lessons" : "School lessons", { exact: true }).waitFor();
+      await page.getByRole("heading", { name: role === "student" ? "Your lessons" : "Lesson calendar", exact: true }).waitFor();
       await page.getByRole("button", { name: "Payments", exact: true }).click();
       await page.getByText(role === "student" ? "Payment history" : role === "admin" ? "Payment review" : "Payments are private.", { exact: true }).waitFor();
       await page.getByRole("button", { name: "Notifications", exact: true }).click();
@@ -255,7 +255,7 @@ async function fixture(
       await page.getByRole("textbox", { name: "Password", exact: true }).fill("fixture-password-123");
       if (signup) await page.getByRole("textbox", { name: "Confirm password", exact: true }).fill("fixture-password-123");
       await page.getByRole("button", { name: signup ? "Create account →" : "Sign in →", exact: true }).click();
-      await page.getByText("Your lessons", { exact: true }).waitFor();
+      await page.getByRole("heading", { name: "Your lessons", exact: true }).waitFor();
       assert.equal(state.signedIn, true);
       assert(state.calls.some(c => c.endpoint === (signup ? "/api/auth/sign-up/email" : "/api/auth/sign-in/email")));
       await close();

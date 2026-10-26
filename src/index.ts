@@ -3,6 +3,7 @@ import { createDatabase } from "./db";
 import { createAuth } from "./auth";
 import { createApp } from "./app";
 import { createR2Storage } from "./receipt-storage";
+import { startLessonReminders } from "./lesson-reminders";
 
 const config = loadConfig();
 const db = createDatabase(config.DATABASE_URL);
@@ -11,6 +12,7 @@ const receipts = config.R2_ACCOUNT_ID ? createR2Storage({ accountId: config.R2_A
   accessKeyId: config.R2_ACCESS_KEY_ID!, secretAccessKey: config.R2_SECRET_ACCESS_KEY!, bucket: config.R2_BUCKET! }) : undefined;
 const app = createApp({ db, getSession: (headers) => auth.api.getSession({ headers }), authHandler: auth.handler, origins: config.TRUSTED_ORIGINS, receipts }).listen(config.PORT);
 console.log(`SSL School API listening on port ${config.PORT}`);
-async function stop() { await app.stop(); await db.$disconnect(); process.exit(0); }
+const stopReminders = startLessonReminders(db);
+async function stop() { stopReminders(); await app.stop(); await db.$disconnect(); process.exit(0); }
 process.on("SIGINT", stop);
 process.on("SIGTERM", stop);

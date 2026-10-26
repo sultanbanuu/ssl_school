@@ -14,7 +14,11 @@ bun run mobile:start
 
 Set `EXPO_PUBLIC_API_URL` and `EXPO_PUBLIC_CURRENCY` (default AZN) in the root
 `.env` or `.env.local`. The old `mobile/.env.local` is no longer read by Expo.
-Use a reachable LAN API address on a physical phone. Keep database credentials,
+For native LAN development, leave `EXPO_PUBLIC_API_URL` unset to use Expo's
+computer address on port 3000 automatically. An explicit value overrides this;
+never use localhost for a physical phone. For a deployed API or an Expo tunnel,
+set a reachable API URL explicitly (Expo's tunnel only forwards Metro).
+Keep database credentials,
 auth secrets, and R2 keys server-side, without an EXPO_PUBLIC_ prefix.
 
 Run the API separately (`bun run dev`) with reviewed migrations applied.

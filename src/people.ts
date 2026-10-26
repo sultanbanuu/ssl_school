@@ -53,6 +53,13 @@ function profileSelect(actor: Actor) {
 
 export function peopleRoutes(db: PrismaClient, actorFor: (request: Request) => Promise<Actor>) {
   return new Elysia()
+    .get("/api/scheduling-students", async ({ request, query }) => {
+      const actor = await actorFor(request);
+      if (actor.role === "teacher") {
+        if (!actor.teacherId) throw new HttpError(403, "Teacher account is incomplete");
+      } else requireStaff(actor);
+      return db.student.findMany({ skip: query.offset, take: query.limit, orderBy: { id: "asc" }, select: { id: true, status: true, profile: { select: { firstName: true, lastName: true } } } });
+    }, { query: pagination })
     .get("/api/students", async ({ request, query }) => {
       const actor = await actorFor(request);
       return db.student.findMany({ where: studentScope(actor), skip: query.offset, take: query.limit, orderBy: { id: "asc" }, include: { profile: { select: profileSelect(actor) } } });

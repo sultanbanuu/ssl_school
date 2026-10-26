@@ -118,3 +118,13 @@ test("students and teachers cannot edit managed records", async () => {
     expect(calls).toHaveLength(0);
   }
 });
+
+test("scheduling directory lists all student names only for staff and teachers", async () => {
+  for (const role of ["admin", "manager", "teacher"] as const) {
+    const f = setup(role);
+    expect((await f.send("/api/scheduling-students?limit=100&offset=100")).status).toBe(200);
+    expect(f.calls[0].args).toEqual({ take: 100, skip: 100, orderBy: { id: "asc" }, select: { id: true, status: true, profile: { select: { firstName: true, lastName: true } } } });
+  }
+  expect((await setup("student").send("/api/scheduling-students")).status).toBe(403);
+  expect((await setup(null).send("/api/scheduling-students")).status).toBe(401);
+});

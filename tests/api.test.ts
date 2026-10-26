@@ -64,3 +64,21 @@ describe("API authorization and validation", () => {
     expect((await app.handle(request("/api/courses?limit=100000"))).status).toBe(422);
   });
 });
+
+test("teachers enroll students only in their own active courses", async () => {
+  for (const own of [true, false]) {
+    let writes = 0;
+    const db: any = {
+      profile: { findUnique: async () => ({ id: userId, role: "teacher", teacher: { id: teacherId } }) },
+      course: { findUnique: async () => ({ id: courseId, active: true, teacherId: own ? teacherId : "another-teacher" }) },
+      student: { findUnique: async () => ({ id: studentId, status: "active" }) },
+      enrollment: { create: async ({ data }: any) => { writes++; return data; } },
+      $transaction: async (fn: any) => fn(db),
+    };
+    const app = createApp({ db, getSession: async () => ({ user: { id: userId } }), authHandler: async () => new Response(), origins: [] }).compile();
+    const response = await app.handle(request("/api/enrollments", { studentId, courseId }));
+    expect(response.status).toBe(own ? 201 : 404);
+    expect(writes).toBe(own ? 1 : 0);
+    if (own) expect((await response.json()).teacherId).toBe(teacherId);
+  }
+});

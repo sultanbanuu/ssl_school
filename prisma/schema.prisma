@@ -32,6 +32,10 @@ enum PaymentStatus {
 model User {
   id            String    @id @default(uuid()) @db.Uuid
   name          String
+  firstName     String?
+  lastName      String?
+  birthDate     String?
+  learningTime  String?
   email         String    @unique
   emailVerified Boolean   @default(false)
   image         String?
@@ -119,6 +123,7 @@ model Student {
   profile      Profile   @relation(fields: [profileId], references: [id], onDelete: Restrict)
   enrollments  Enrollment[]
   progress     ProgressRecord[]
+  trialRequests TrialRequest[]
   payments     Payment[]
   paymentUploads PaymentUpload[]
   @@map("students")
@@ -131,6 +136,7 @@ model Teacher {
   profile        Profile @relation(fields: [profileId], references: [id], onDelete: Restrict)
   courses        Course[]
   enrollments    Enrollment[]
+  availability AvailabilitySlot[]
   lessons        Lesson[]
   progress       ProgressRecord[]
   @@map("teachers")
@@ -162,6 +168,7 @@ model Course {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   teacher     Teacher  @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  availability AvailabilitySlot[]
   enrollments Enrollment[]
   payments    Payment[]
   paymentUploads PaymentUpload[]
@@ -192,12 +199,22 @@ model Lesson {
   date         DateTime     @db.Date
   startTime    DateTime     @map("start_time") @db.Time(6)
   endTime      DateTime?    @map("end_time") @db.Time(6)
+  endDate      DateTime?    @map("end_date") @db.Date
+  allDay       Boolean      @default(false) @map("all_day")
+  seriesId     String?      @map("series_id") @db.Uuid
+  repeatRule   Json?        @map("repeat_rule")
+    color        String?
+  reminderMinutes Int?      @map("reminder_minutes")
+  reminderAt   DateTime?    @map("reminder_at") @db.Timestamptz(6)
+  reminderSentAt DateTime?  @map("reminder_sent_at") @db.Timestamptz(6)
   status       LessonStatus @default(scheduled)
   enrollment   Enrollment   @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
   teacher      Teacher      @relation(fields: [teacherId], references: [id], onDelete: Restrict)
   progress     ProgressRecord[]
   @@index([enrollmentId])
   @@index([teacherId, date])
+  @@index([seriesId, date])
+  @@index([reminderAt, reminderSentAt])
   @@map("lessons")
 }
 
@@ -273,4 +290,35 @@ model Notification {
   profile   Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([userId, isRead, createdAt])
   @@map("notifications")
+}
+
+model AvailabilitySlot {
+  id String @id @default(uuid()) @db.Uuid
+  teacherId String @map("teacher_id") @db.Uuid
+  courseId String @map("course_id") @db.Uuid
+  startsAt DateTime @map("starts_at") @db.Timestamptz(6)
+  endsAt DateTime @map("ends_at") @db.Timestamptz(6)
+  active Boolean @default(true)
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  requests TrialRequest[]
+  @@index([teacherId, startsAt])
+  @@index([startsAt])
+  @@index([courseId])
+  @@map("availability_slots")
+}
+
+model TrialRequest {
+  id String @id @default(uuid()) @db.Uuid
+  slotId String @map("slot_id") @db.Uuid
+  studentId String @map("student_id") @db.Uuid
+  status String @default("pending")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  slot AvailabilitySlot @relation(fields: [slotId], references: [id], onDelete: Restrict)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  @@unique([slotId, studentId])
+  @@index([studentId, status])
+  @@index([slotId, status])
+  @@map("trial_requests")
 }

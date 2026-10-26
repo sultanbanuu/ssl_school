@@ -5,6 +5,7 @@ import { HttpError, courseScope, enrollmentScope, requireStaff, type Actor } fro
 import { createCourseBody, createEnrollmentBody, pagination } from "./contracts";
 import { peopleRoutes } from "./people";
 import { roleRoutes } from "./roles";
+import { availabilityRoutes } from "./availability";
 import { lessonRoutes } from "./lessons";
 import { paymentRoutes } from "./payments";
 import { notificationRoutes } from "./notifications";
@@ -51,6 +52,7 @@ export function createApp({ db, getSession, authHandler, origins, receipts }: De
     .use(peopleRoutes(db, actorFor))
     .use(roleRoutes(db, actorFor))
     .use(lessonRoutes(db, actorFor))
+    .use(availabilityRoutes(db, actorFor))
     .use(paymentRoutes(db, actorFor, receipts))
     .use(notificationRoutes(db, actorFor))
     .get("/api/me", async ({ request }) => {
@@ -73,9 +75,13 @@ export function createApp({ db, getSession, authHandler, origins, receipts }: De
       return db.enrollment.findMany({ where: enrollmentScope(actor), include: { course: { select: { name: true } }, student: { select: { profile: { select: { firstName: true, lastName: true } } } } }, take: query.limit, skip: query.offset, orderBy: [{ createdAt: "desc" }, { id: "asc" }] });
     }, { query: pagination })
     .post("/api/enrollments", async ({ request, body, set }) => {
-      requireStaff(await actorFor(request));
+      const actor = await actorFor(request);
+      if (actor.role === "teacher") {
+        if (!actor.teacherId) throw new HttpError(403, "Teacher account is incomplete");
+      } else requireStaff(actor);
       const result = await db.$transaction(async (tx) => {
         const course = await tx.course.findUnique({ where: { id: body.courseId } });
+        if (actor.role === "teacher" && course?.teacherId !== actor.teacherId) throw new HttpError(404, "Course not found");
         if (!course?.active) throw new HttpError(422, "Select an active course");
         const student = await tx.student.findUnique({ where: { id: body.studentId } });
         if (!student || student.status !== "active") throw new HttpError(422, "Select an active student");
