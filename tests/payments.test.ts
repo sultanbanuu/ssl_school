@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createApp } from "../src/app";
-import { addCalendarMonths } from "../src/payments";
+import { addCalendarMonths } from "../src/modules/payments/service";
 import { isReceiptImage, type ReceiptStorage } from "../src/receipt-storage";
 import { Prisma, type PrismaClient } from "../src/generated/prisma/client";
 import type { Role } from "../src/generated/prisma/enums";

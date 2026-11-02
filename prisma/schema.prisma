@@ -108,6 +108,8 @@ model Profile {
   admin           Admin?
   notifications   Notification[]
   reviewedPayments Payment[] @relation("PaymentReviewer")
+  reviewedReschedules RescheduleRequest[] @relation("RescheduleReviewer")
+  waivedReschedules RescheduleRequest[] @relation("RescheduleWaiver")
   @@map("profiles")
 }
 
@@ -124,6 +126,7 @@ model Student {
   enrollments  Enrollment[]
   progress     ProgressRecord[]
   trialRequests TrialRequest[]
+  rescheduleRequests RescheduleRequest[]
   payments     Payment[]
   paymentUploads PaymentUpload[]
   @@map("students")
@@ -137,6 +140,7 @@ model Teacher {
   courses        Course[]
   enrollments    Enrollment[]
   availability AvailabilitySlot[]
+  rescheduleRequests RescheduleRequest[]
   lessons        Lesson[]
   progress       ProgressRecord[]
   @@map("teachers")
@@ -208,6 +212,9 @@ model Lesson {
   reminderAt   DateTime?    @map("reminder_at") @db.Timestamptz(6)
   reminderSentAt DateTime?  @map("reminder_sent_at") @db.Timestamptz(6)
   status       LessonStatus @default(scheduled)
+  rescheduledAt DateTime? @map("rescheduled_at") @db.Timestamptz(6)
+  cancelledByStudent Boolean @default(false) @map("cancelled_by_student")
+  rescheduleRequests RescheduleRequest[]
   enrollment   Enrollment   @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
   teacher      Teacher      @relation(fields: [teacherId], references: [id], onDelete: Restrict)
   progress     ProgressRecord[]
@@ -299,13 +306,46 @@ model AvailabilitySlot {
   startsAt DateTime @map("starts_at") @db.Timestamptz(6)
   endsAt DateTime @map("ends_at") @db.Timestamptz(6)
   active Boolean @default(true)
+  purpose String @default("trial")
   teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Restrict)
   course Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
   requests TrialRequest[]
+  rescheduleRequests RescheduleRequest[]
   @@index([teacherId, startsAt])
   @@index([startsAt])
   @@index([courseId])
   @@map("availability_slots")
+}
+
+model RescheduleRequest {
+  id String @id @default(uuid()) @db.Uuid
+  lessonId String @map("lesson_id") @db.Uuid
+  slotId String? @map("slot_id") @db.Uuid
+  studentId String @map("student_id") @db.Uuid
+  teacherId String @map("teacher_id") @db.Uuid
+  status String @default("pending")
+  originalStart DateTime @map("original_start") @db.Timestamptz(6)
+  originalEnd DateTime @map("original_end") @db.Timestamptz(6)
+  startsAt DateTime @map("starts_at") @db.Timestamptz(6)
+  endsAt DateTime @map("ends_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  reviewedAt DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  reviewedBy String? @map("reviewed_by") @db.Uuid
+  reviewNote String? @map("review_note")
+  quotaWaived Boolean @default(false) @map("quota_waived")
+  waivedBy String? @map("waived_by") @db.Uuid
+  waivedAt DateTime? @map("waived_at") @db.Timestamptz(6)
+  waiverReason String? @map("waiver_reason")
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Restrict)
+  slot AvailabilitySlot? @relation(fields: [slotId], references: [id], onDelete: Restrict)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  reviewer Profile? @relation("RescheduleReviewer", fields: [reviewedBy], references: [id], onDelete: NoAction)
+  waiver Profile? @relation("RescheduleWaiver", fields: [waivedBy], references: [id], onDelete: NoAction)
+  @@index([studentId, createdAt])
+  @@index([teacherId, status])
+  @@index([lessonId, status])
+  @@map("reschedule_requests")
 }
 
 model TrialRequest {

@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { createDatabase } from "../src/db";
-import { createAuth } from "../src/auth";
+import { createAuth } from "../src/modules/auth/service";
 import { createApp } from "../src/app";
 import { loadConfig } from "../src/config";
 import { provisionAccount } from "../src/accounts";

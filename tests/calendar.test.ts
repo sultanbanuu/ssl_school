@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createApp } from "../src/app";
-import { dates, serialize } from "../src/lessons";
+import { dates, serialize } from "../src/modules/lessons/service";
 import { deliverLessonReminders } from "../src/lesson-reminders";
 import { addDays, bounds, movedSlot, occurrences } from "../src/scheduling";
 import type { PrismaClient } from "../src/generated/prisma/client";

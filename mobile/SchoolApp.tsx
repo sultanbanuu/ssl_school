@@ -32,6 +32,8 @@ import { Lessons } from "./Lessons";
 import { Availability } from "./Availability";
 import { Notifications } from "./src/Notifications";
 import { useNotificationUpdates } from "./src/useNotificationUpdates";
+import { StudentApp } from "./StudentApp";
+import { RescheduleReview } from "./RescheduleReview";
 
 type Route =
   | { name: "availability" }
@@ -142,7 +144,11 @@ function Notice({ text }: { text: string }) {
   ) : null;
 }
 
-export function SchoolApp({
+export function SchoolApp(props: React.ComponentProps<typeof StaffSchoolApp>) {
+  return props.profile.role === "student" ? <StudentApp {...props} /> : <StaffSchoolApp {...props} />;
+}
+
+function StaffSchoolApp({
   profile,
   onSignOut,
   busy: signingOut,
@@ -199,15 +205,39 @@ export function SchoolApp({
             </Pressable>
           </View>
           {profile && (
-            <View style={[s.row, { paddingHorizontal: 16, paddingTop: 12, flexWrap: "wrap", gap: 12 }]}>
+            <View
+              style={[
+                s.row,
+                {
+                  paddingHorizontal: 16,
+                  paddingTop: 12,
+                  flexWrap: "wrap",
+                  gap: 12,
+                },
+              ]}
+            >
               <Pressable
                 accessibilityRole="button"
                 onPress={() => setRoute({ name: "lessons" })}
               >
                 <Text style={s.link}>Lessons</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityState={{ selected: route.name === "availability" }} onPress={() => setRoute({ name: "availability" })} style={{ minHeight: 44, justifyContent: "center" }}>
-                <Text style={[s.link, route.name === "availability" && { textDecorationLine: "underline" }]}>Teacher Availability</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected: route.name === "availability" }}
+                onPress={() => setRoute({ name: "availability" })}
+                style={{ minHeight: 44, justifyContent: "center" }}
+              >
+                <Text
+                  style={[
+                    s.link,
+                    route.name === "availability" && {
+                      textDecorationLine: "underline",
+                    },
+                  ]}
+                >
+                  Teacher Availability
+                </Text>
               </Pressable>
               <Pressable accessibilityRole="button" onPress={goHome}>
                 <Text style={s.link}>Payments</Text>
@@ -237,7 +267,13 @@ export function SchoolApp({
           )}
           <Notice text={error} />
           {route.name === "availability" ? (
-            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[s.content, { maxWidth: 1500, paddingHorizontal: 16 }]}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={[
+                s.content,
+                { maxWidth: 1500, paddingHorizontal: 16 },
+              ]}
+            >
               <Availability role={profile.role} onFailure={onFailure} />
             </ScrollView>
           ) : route.name === "lessons" ? (
@@ -248,7 +284,8 @@ export function SchoolApp({
                   profile.role !== "student" && { maxWidth: 1500 },
               ]}
             >
-              <Lessons role={profile.role} onFailure={onFailure} />
+              {(profile.role === "admin" || profile.role === "teacher") && <RescheduleReview role={profile.role} onFailure={onFailure} onChanged={() => setRevision(v => v + 1)} />}
+              <Lessons key={revision} role={profile.role} onFailure={onFailure} />
             </ScrollView>
           ) : route.name === "notifications" ? (
             <Notifications
@@ -329,7 +366,7 @@ export function SchoolApp({
   );
 }
 
-function History({
+export function History({
   profile,
   open,
   create,
@@ -517,7 +554,7 @@ function History({
   );
 }
 
-function NewPayment({ done }: { done: (id: string) => void }) {
+export function NewPayment({ done }: { done: (id: string) => void }) {
   const [courses, setCourses] = useState<Course[]>([]);
   const [course, setCourse] = useState<Course | null>(null);
   const [asset, setAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
@@ -724,7 +761,7 @@ function NewPayment({ done }: { done: (id: string) => void }) {
   );
 }
 
-function Detail({ id, admin }: { id: string; admin: boolean }) {
+export function Detail({ id, admin }: { id: string; admin: boolean }) {
   const [payment, setPayment] = useState<Payment | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1177,3 +1214,4 @@ const s = StyleSheet.create({
   receipt: { width: "100%", height: 360 },
   divider: { height: 1, backgroundColor: "#e4e9e1" },
 });
+

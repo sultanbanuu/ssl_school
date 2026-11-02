@@ -26,6 +26,51 @@ inboxes with staff announcements. See [payments](docs/payments.md),
 Progress tracking, invitation email, password reset email, non-receipt uploads,
 audit trails, deployment, and full management dashboards remain on the roadmap.
 
+## Backend organization
+
+All endpoints are organized by feature under `src/modules`:
+
+```text
+src/
+  app.ts
+  modules/
+    auth/
+    availability/
+    courses/
+    enrollments/
+    health/
+    lessons/
+    notifications/
+    payments/
+      routes.ts
+      schemas.ts
+      service.ts
+    people/
+    profile/
+    roles/
+  shared/
+    account-schemas.ts
+    authorization.ts
+    pagination.ts
+prisma/
+  schema.prisma
+```
+
+Each feature follows the payment module's layout. `routes.ts` registers endpoints, resolves the authenticated actor,
+and sets HTTP statuses and headers. `schemas.ts` defines Zod validation for
+request bodies, parameters, and queries. `service.ts` handles access rules,
+business logic, database transactions, and response data without depending on
+the HTTP request context. Services infer their input types from the schemas.
+Health and profile have no request inputs, so they need no `schemas.ts`.
+The auth module delegates its wildcard routes to Better Auth and keeps signup
+validation in `schemas.ts`, with auth setup and actor resolution in `service.ts`.
+
+`app.ts` assembles the feature routes, CORS, and shared error handling. Shared
+authorization and pagination live in `src/shared`; database models remain in
+`prisma/schema.prisma`. Students, teachers, and the scheduling directory live in
+`people`; availability and trial bookings live in `availability`. Operator account
+provisioning remains in `src/accounts.ts`, using `shared/account-schemas.ts`.
+
 ## Start locally
 
 Requires Bun and Node.js/npm for the pinned toolchain. Dependencies are committed
@@ -247,3 +292,18 @@ bookings therefore check availability after the previous mutation commits.
 This deliberately serializes schedule writes across the school; revisit lock
 granularity if scheduling volume grows. Direct database writers must use the
 same availability-check protocol; conflict rejection is enforced by the API.
+
+## Student lesson rescheduling
+
+Students open **Lesson → lesson card → Manage lesson** to select an available time matching the original lesson duration and submit a request. A 60-minute lesson displays 60-minute choices; a 90-minute lesson displays 90-minute choices. Start times are offered every 30 minutes within free calendar ranges. Gaps exclude existing lessons and pending/approved trials for the teacher or student and must fit the entire lesson. No manual full-lesson availability publishing is needed.
+
+Sayad's Baku working hours are Monday–Friday **10:00–11:00 and 15:00–23:30**, Saturday **12:30–23:30**, and no Sunday hours. Sultanbanu works Monday, Tuesday, Thursday and Friday **10:00–11:00 and 16:00–22:00**, Saturday **16:00–22:00**, and does not work Wednesday or Sunday. The student's selected lesson determines whose calendar is used. Availability refreshes automatically every 15 seconds, including previously loaded weeks. Newly signed-up students retain separate **15-minute trials with Sayad only**.
+
+The existing lesson stays booked until approval. Each submitted request counts toward **three per Baku calendar month**, including rejected requests. Only one request per lesson may be pending. Pending requests do not reserve the proposed time; approval rechecks working hours, duration, teacher/student conflicts, and whether the original lesson changed.
+
+Teachers and admins open **Lessons → Rescheduling requests** to approve or reject requests. Approval moves only the selected lesson, resets its reminder, and displays **Rescheduled** on its card. Notifications cover requests and outcomes.
+
+Student cancellation has no monthly quota and closes pending requests for that lesson. Admins can restore future student-cancelled lessons if the time remains free, or exclude a mistaken rescheduling request from the monthly count with a recorded reason.
+
+Run `bun run db:generate` and `bun run db:migrate` when deploying these changes. Validation: `bun test`, `bun run typecheck`, `bun run mobile:export`, and `bun scripts/test-rescheduling-ui.ts` (isolated browser fixtures).
+

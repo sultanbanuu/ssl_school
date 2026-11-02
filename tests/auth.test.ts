@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createAuth } from "../src/auth";
+import { createAuth } from "../src/modules/auth/service";
 import { createDatabase } from "../src/db";
 
 test("public signup rejects short passwords before any database write", async () => {

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { createApp } from "../src/app";
-import { dates } from "../src/lessons";
+import { dates } from "../src/modules/lessons/service";
+import { workingMinutes } from "../src/teacher-hours";
 
 const teacher = "11111111-1111-4111-8111-111111111111", student = "22222222-2222-4222-8222-222222222222", course = "33333333-3333-4333-8333-333333333333", other = "44444444-4444-4444-8444-444444444444";
 const input = { teacherId: teacher, courseId: course, date: "2099-01-05", startTime: "16:00", endTime: "16:15" };
@@ -14,6 +15,7 @@ function matches(row: any, where: any): boolean {
     if ("in" in value) return value.in.includes(actual);
     if ("notIn" in value) return !value.notIn.includes(actual);
     if ("not" in value) return actual !== value.not;
+    if ("equals" in value) return value.mode === "insensitive" ? String(actual).toLowerCase() === String(value.equals).toLowerCase() : actual === value.equals;
     if ("none" in value) return !actual.some((r: any) => matches(r, value.none));
     if (["lt", "lte", "gt", "gte"].some(k => k in value)) return actual != null && (!("lt" in value) || actual < value.lt) && (!("lte" in value) || actual <= value.lte) && (!("gt" in value) || actual > value.gt) && (!("gte" in value) || actual >= value.gte);
     return matches(actual, value);
@@ -22,7 +24,7 @@ function matches(row: any, where: any): boolean {
 function fixture() {
   let role = "admin", who = student, teacherId = teacher;
   let slots: any[] = [], requests: any[] = [], lessons: any[] = [], lockCount = 0;
-  const decorateSlot = (s: any) => ({ ...s, course: { id: s.courseId, name: "English", active: true }, teacher: { id: s.teacherId, profile: { firstName: "Sayad", lastName: "Test" } }, requests: requests.filter(r => r.slotId === s.id && ["pending", "approved"].includes(r.status)).map(r => ({ ...r, student: { profile: { firstName: "Student", lastName: "Test" } } })) });
+  const decorateSlot = (s: any) => ({ ...s, course: { id: s.courseId, name: "English", active: true }, teacher: { id: s.teacherId, profile: { firstName: s.teacherName || "Sayad", lastName: "Test" } }, requests: requests.filter(r => r.slotId === s.id && ["pending", "approved"].includes(r.status)).map(r => ({ ...r, student: { profile: { firstName: "Student", lastName: "Test" } } })) });
   const decorateRequest = (r: any) => ({ ...r, slot: decorateSlot(slots.find(s => s.id === r.slotId)), student: { profile: { firstName: "Student", lastName: "Test" } } });
   const many = (rows: any[], args: any) => rows.filter(row => matches(row, args.where)).slice(args.skip || 0, (args.skip || 0) + (args.take ?? rows.length));
   const db: any = {
@@ -76,6 +78,16 @@ test("new students request trials without enrollments; approvals, ownership and 
   f.act("teacher");
   expect((await f.send(`/availability/${slot.id}`, "PATCH", { ...input, startTime: "17:00", endTime: "17:15" })).status).toBe(200);
   expect((await f.send(`/availability/${slot.id}`, "PATCH", { active: false })).status).toBe(200);
+});
+
+test("student trials exclude teachers other than Sayad", async () => {
+  const f = fixture();
+  const slot = await (await f.send("/availability", "POST", input)).json();
+  f.slots()[0].teacherName = "Another teacher";
+  f.act("student");
+  const list = await (await f.send("/availability?from=2099-01-01&to=2099-01-07")).json();
+  expect(list.items).toHaveLength(0);
+  expect((await f.send("/trial-requests", "POST", { slotId: slot.id })).status).toBe(409);
 });
 
 test("student trial reservations cannot overlap across teachers but adjacent trials are allowed", async () => {
@@ -136,13 +148,14 @@ test("generated Sayad trials are stable, fifteen minutes, skip Sundays and regul
  f.act("student");
  const path = "/availability?from=2099-01-05&to=2099-01-11";
  const first = await (await f.send(path)).json();
- expect(first.items.length).toBe(54);
+ expect(first.items.length).toBe(62);
  expect((await (await f.send(path)).json()).items).toEqual(first.items);
  for (const slot of first.items) {
   expect(new Date(slot.endsAt).getTime() - new Date(slot.startsAt).getTime()).toBe(900000);
   const civil = new Date(new Date(slot.startsAt).getTime() + 4 * 3600000);
   expect(civil.getUTCDay()).not.toBe(0);
-  expect(civil.getUTCHours() === 10 || civil.getUTCHours() >= 16).toBe(true);
+  const minute = civil.getUTCHours() * 60 + civil.getUTCMinutes();
+  expect(workingMinutes("Sayad", civil.toISOString().slice(0, 10)).some(([a,b]) => minute >= a && minute + 15 <= b)).toBe(true);
  }
  const slot = first.items[0];
  const conflict = first.items[1];

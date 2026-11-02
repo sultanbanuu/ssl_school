@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { birthDateSchema, learningTimeOptions, learningTimeSchema, signupName } from "../src/signup";
+import { birthDateSchema, learningTimeOptions, learningTimeSchema, signupName } from "../src/modules/auth/schemas";
 
 test("signup requires real, non-future birth dates", () => {
   for (const value of ["", "2001-02-29", "2000-04-31", "2000-13-01", "2999-01-01", "01/02/2000"]) {

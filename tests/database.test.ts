@@ -27,12 +27,27 @@ afterAll(async () => { await db.close(); });
 
 test("migrations recreate all school and authentication tables", async () => {
   const result = await db.query<{ count: number }>("SELECT count(*)::int AS count FROM pg_tables WHERE schemaname='public'");
-  expect(result.rows[0].count).toBe(18);
+  expect(result.rows[0].count).toBe(19);
 });
 
 test("lesson status accepts rescheduled after migrations", async () => {
   const result = await db.query<{ status: string }>(`SELECT 'rescheduled'::"LessonStatus" AS status`);
   expect(result.rows[0].status).toBe("rescheduled");
+});
+
+test("rescheduling allows one pending request per lesson and retains reviewed history", async () => {
+  const course = crypto.randomUUID(), enrollment = crypto.randomUUID(), lesson = crypto.randomUUID(), slot = crypto.randomUUID();
+  await db.query("INSERT INTO courses (id, name, category, price, teacher_id, updated_at) VALUES ($1, 'Rescheduling', 'General', 50, $2, now())", [course, teacherId]);
+  await db.query("INSERT INTO enrollments (id, student_id, course_id, teacher_id) VALUES ($1, $2, $3, $4)", [enrollment, studentId, course, teacherId]);
+  await db.query("INSERT INTO lessons (id, enrollment_id, teacher_id, date, start_time, end_time) VALUES ($1, $2, $3, '2099-11-02', '10:00', '11:00')", [lesson, enrollment, teacherId]);
+  await db.query("INSERT INTO availability_slots (id, teacher_id, course_id, starts_at, ends_at, purpose) VALUES ($1, $2, $3, '2099-11-03T10:00:00+04:00', '2099-11-03T11:00:00+04:00', 'reschedule')", [slot, teacherId, course]);
+  const insert = () => db.query("INSERT INTO reschedule_requests (lesson_id, slot_id, student_id, teacher_id, original_start, original_end, starts_at, ends_at) VALUES ($1, $2, $3, $4, '2099-11-02T10:00:00+04:00', '2099-11-02T11:00:00+04:00', '2099-11-03T10:00:00+04:00', '2099-11-03T11:00:00+04:00')", [lesson, slot, studentId, teacherId]);
+  await insert();
+  await expect(insert()).rejects.toThrow(/unique constraint/);
+  await db.query("UPDATE reschedule_requests SET status='rejected' WHERE lesson_id=$1", [lesson]);
+  await insert();
+  const rows = await db.query("SELECT status FROM reschedule_requests WHERE lesson_id=$1", [lesson]);
+  expect(rows.rows).toHaveLength(2);
 });
 
 test("calendar migration permits overnight lessons but rejects reversed ranges and invalid reminders", async () => {
