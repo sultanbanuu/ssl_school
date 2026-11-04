@@ -19,7 +19,8 @@
     "test:notifications:ui": "bun scripts/test-notification-ui.ts",
     "test:calendar:ui": "bun scripts/test-calendar-ui.ts",
     "mobile:export": "expo export --platform web --output-dir mobile/dist-notification-review",
-    "test:availability:ui": "bun scripts/test-availability-ui.ts"
+    "test:availability:ui": "bun scripts/test-availability-ui.ts",
+    "test:performance:ui": "bun scripts/test-performance-ui.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1153.0",

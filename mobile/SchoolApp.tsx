@@ -1,3 +1,4 @@
+import { StatusBadge } from "./StatusBadge";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -28,6 +29,7 @@ import {
   Upload,
 } from "./src/api";
 
+import { Performance } from "./Performance";
 import { Lessons } from "./Lessons";
 import { Availability } from "./Availability";
 import { Notifications } from "./src/Notifications";
@@ -36,6 +38,7 @@ import { StudentApp } from "./StudentApp";
 import { RescheduleReview } from "./RescheduleReview";
 
 type Route =
+  | { name: "performance" }
   | { name: "availability" }
   | { name: "lessons" }
   | { name: "notifications" }
@@ -78,7 +81,7 @@ function Button({
         (disabled || pressed) && { opacity: 0.5 },
       ]}
     >
-      <Text style={[s.buttonText, secondary && { color: "#233f36" }]}>
+      <Text style={[s.buttonText, secondary && { color: "#f5f5f3" }]}>
         {title}
       </Text>
     </Pressable>
@@ -101,40 +104,7 @@ function Field({
   );
 }
 function Badge({ status }: { status: Payment["status"] }) {
-  return (
-    <View
-      style={[
-        s.badge,
-        {
-          backgroundColor:
-            status === "pending"
-              ? "#fff0d2"
-              : status === "approved"
-                ? "#e1f1e7"
-                : "#fbe8e5",
-        },
-      ]}
-    >
-      <Text
-        style={{
-          fontSize: 12,
-          fontWeight: "700",
-          color:
-            status === "pending"
-              ? "#886017"
-              : status === "approved"
-                ? "#246348"
-                : "#a0443b",
-        }}
-      >
-        {status === "pending"
-          ? "Awaiting review"
-          : status === "approved"
-            ? "Approved"
-            : "Cancelled"}
-      </Text>
-    </View>
-  );
+  return <StatusBadge label={status === "pending" ? "Awaiting review" : status === "approved" ? "Approved" : "Cancelled"} tone={status === "pending" ? "yellow" : status === "approved" ? "green" : "coral"} />;
 }
 function Notice({ text }: { text: string }) {
   return text ? (
@@ -242,6 +212,9 @@ function StaffSchoolApp({
               <Pressable accessibilityRole="button" onPress={goHome}>
                 <Text style={s.link}>Payments</Text>
               </Pressable>
+              <Pressable accessibilityRole="button" onPress={() => setRoute({ name: "performance" })} style={{ minHeight: 44, justifyContent: "center" }}>
+                <Text style={s.link}>Analytics / Performance</Text>
+              </Pressable>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Notifications"
@@ -266,7 +239,7 @@ function StaffSchoolApp({
             </View>
           )}
           <Notice text={error} />
-          {route.name === "availability" ? (
+          {route.name === "performance" ? <Performance profile={profile} onFailure={onFailure} /> : route.name === "availability" ? (
             <ScrollView
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={[
@@ -376,7 +349,6 @@ export function History({
   create: () => void;
 }) {
   const [items, setItems] = useState<Payment[]>([]);
-  const [filter, setFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [more, setMore] = useState(false);
@@ -389,7 +361,7 @@ export function History({
     setError("");
     try {
       const rows = await api<Payment[]>(
-        `/payments?limit=25&offset=0${filter ? `&status=${filter}` : ""}`,
+        `/payments?limit=25&offset=0`,
       );
       if (ticket === generation.current) {
         setItems(rows);
@@ -407,7 +379,7 @@ export function History({
         busy.current = false;
       }
     }
-  }, [filter]);
+  }, []);
   useEffect(() => {
     void load();
     const sub = AppState.addEventListener("change", (state) => {
@@ -425,7 +397,7 @@ export function History({
     const ticket = generation.current;
     try {
       const rows = await api<Payment[]>(
-        `/payments?limit=25&offset=${items.length}${filter ? `&status=${filter}` : ""}`,
+        `/payments?limit=25&offset=${items.length}`,
       );
       if (ticket === generation.current) {
         setItems((old) => [
@@ -490,25 +462,6 @@ export function History({
           ? "Your submissions from the last six months"
           : "Only an explicit decision changes payment status"}
       </Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={s.filters}
-      >
-        {["", "pending", "approved", "cancelled"].map((value) => (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ selected: filter === value }}
-            key={value}
-            onPress={() => setFilter(value)}
-            style={[s.chip, filter === value && s.chipActive]}
-          >
-            <Text style={[s.chipText, filter === value && { color: "#fff" }]}>
-              {value ? value[0].toUpperCase() + value.slice(1) : "All payments"}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
       <Notice text={error} />
       {loading && !items.length ? (
         <ActivityIndicator color="#255d47" />
@@ -516,20 +469,19 @@ export function History({
         <View style={s.card}>
           <Text style={s.section}>Nothing here yet</Text>
           <Text style={s.muted}>
-            {filter
-              ? "No payments match this status."
-              : "Your payment submissions will appear here."}
+            Your payment submissions will appear here.
           </Text>
         </View>
       ) : (
         items.map((p) => (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`${p.courseName || "Course payment"}, ${money(p.amount)}, ${p.status}`}
+            accessibilityLabel={`${p.studentName || "Student name unavailable"}, ${p.courseName || "Course payment"}, ${money(p.amount)}, ${p.status}`}
             key={p.id}
             onPress={() => open(p.id)}
             style={s.card}
           >
+            <Text style={s.body}>{p.studentName || "Student name unavailable"}</Text>
             <View style={s.row}>
               <Text style={s.course}>{p.courseName || "Course payment"}</Text>
               <Text style={s.amount}>{money(p.amount)}</Text>
@@ -900,6 +852,8 @@ export function Detail({ id, admin }: { id: string; admin: boolean }) {
                 <Text style={s.body}>{payment.cancellationReason}</Text>
               </>
             )}
+            <Text style={s.label}>Student</Text>
+            <Text style={s.body}>{payment.studentName || "Student name unavailable"}</Text>
             {admin && (
               <>
                 <Text style={s.label}>Student ID</Text>
@@ -1017,7 +971,7 @@ const s = StyleSheet.create({
     position: "absolute",
     top: -9,
     right: -8,
-    backgroundColor: "#ad423b",
+    backgroundColor: "#7064ed",
     borderRadius: 12,
     minWidth: 22,
     minHeight: 22,
@@ -1025,7 +979,7 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  notificationBadgeText: { color: "#fff", fontSize: 11, fontWeight: "800" },
+  notificationBadgeText: { color: "#f5f5f3", fontSize: 11, fontWeight: "800" },
   floatingNotification: {
     position: "absolute",
     top: 12,
@@ -1033,7 +987,7 @@ const s = StyleSheet.create({
     right: 16,
     maxWidth: 620,
     alignSelf: "center",
-    backgroundColor: "#204e3e",
+    backgroundColor: "#7064ed",
     borderRadius: 18,
     padding: 18,
     flexDirection: "row",
@@ -1045,16 +999,16 @@ const s = StyleSheet.create({
     shadowOffset: { width: 0, height: 5 },
     zIndex: 20,
   },
-  floatingLabel: { fontSize: 11, color: "#d2e6ab", fontWeight: "700" },
-  floatingTitle: { fontSize: 17, color: "#fff", fontWeight: "700" },
-  floatingBody: { fontSize: 14, lineHeight: 20, color: "#e1eae4" },
+  floatingLabel: { fontSize: 11, color: "#b5b5b5", fontWeight: "700" },
+  floatingTitle: { fontSize: 17, color: "#f5f5f3", fontWeight: "700" },
+  floatingBody: { fontSize: 14, lineHeight: 20, color: "#f5f5f3" },
   flex: { flex: 1 },
-  safe: { flex: 1, backgroundColor: "#f7f8f4" },
+  safe: { flex: 1, backgroundColor: "#191919" },
   loading: { flex: 1 },
   header: {
     padding: 22,
     borderBottomWidth: 1,
-    borderColor: "#e5e9e2",
+    borderColor: "#3d3d3d",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -1064,23 +1018,23 @@ const s = StyleSheet.create({
     width: 38,
     height: 42,
     borderRadius: 12,
-    backgroundColor: "#255d47",
+    backgroundColor: "#7064ed",
     alignItems: "center",
     justifyContent: "center",
   },
-  logoText: { color: "#f1f8dc", fontSize: 27, fontWeight: "800" },
+  logoText: { color: "#f5f5f3", fontSize: 27, fontWeight: "800" },
   brandName: {
     fontSize: 13,
     fontWeight: "800",
     letterSpacing: 2,
-    color: "#233f36",
+    color: "#f5f5f3",
   },
   content: {
-    padding: 24,
+    padding: 22,
     gap: 18,
     paddingBottom: 48,
     width: "100%",
-    maxWidth: 680,
+    maxWidth: 700,
     alignSelf: "center",
   },
   back: { paddingHorizontal: 24, paddingTop: 18 },
@@ -1088,56 +1042,56 @@ const s = StyleSheet.create({
     fontSize: 10,
     fontWeight: "800",
     letterSpacing: 2,
-    color: "#617569",
+    color: "#b5b5b5",
     marginTop: 8,
   },
   title: {
-    fontSize: 36,
+    fontSize: 28,
     fontWeight: "700",
     letterSpacing: -1.4,
-    color: "#183f31",
+    color: "#f5f5f3",
   },
-  muted: { fontSize: 15, color: "#68766e", lineHeight: 23 },
-  small: { fontSize: 12, color: "#748178", lineHeight: 19 },
-  body: { fontSize: 15, color: "#233f36", lineHeight: 22 },
+  muted: { fontSize: 15, color: "#b5b5b5", lineHeight: 23 },
+  small: { fontSize: 12, color: "#b5b5b5", lineHeight: 19 },
+  body: { fontSize: 15, color: "#f5f5f3", lineHeight: 22 },
   link: {
     fontSize: 13,
-    color: "#255d47",
+    color: "#f5f5f3",
     fontWeight: "700",
     paddingVertical: 5,
   },
   hero: {
-    backgroundColor: "#204e3e",
+    backgroundColor: "#7064ed",
     padding: 25,
     borderRadius: 22,
     gap: 17,
     marginVertical: 5,
   },
   heroLabel: {
-    color: "#c2d68f",
+    color: "#b5b5b5",
     fontSize: 9,
     letterSpacing: 1.8,
     fontWeight: "700",
   },
   heroTitle: {
-    color: "#fff",
+    color: "#f5f5f3",
     fontSize: 28,
     lineHeight: 34,
     fontWeight: "600",
     maxWidth: 300,
   },
-  heroBody: { color: "#d0dfd4", fontSize: 14, lineHeight: 22 },
+  heroBody: { color: "#f0edff", fontSize: 14, lineHeight: 22 },
   card: {
     padding: 20,
     borderRadius: 18,
-    backgroundColor: "#fff",
+    backgroundColor: "#272727",
     borderWidth: 1,
-    borderColor: "#e4e9e1",
+    borderColor: "#3d3d3d",
     gap: 14,
   },
   selected: {
-    borderColor: "#255d47",
-    backgroundColor: "#edf4e9",
+    borderColor: "#3d3d3d",
+    backgroundColor: "#272727",
     borderWidth: 2,
   },
   row: {
@@ -1147,12 +1101,12 @@ const s = StyleSheet.create({
     gap: 12,
     flexWrap: "wrap",
   },
-  section: { fontSize: 18, color: "#233f36", fontWeight: "700" },
-  course: { fontSize: 16, color: "#233f36", fontWeight: "600", flexShrink: 1 },
-  amount: { fontSize: 16, color: "#233f36", fontWeight: "700" },
+  section: { fontSize: 18, color: "#f5f5f3", fontWeight: "700" },
+  course: { fontSize: 16, color: "#f5f5f3", fontWeight: "600", flexShrink: 1 },
+  amount: { fontSize: 16, color: "#f5f5f3", fontWeight: "700" },
   total: {
     fontSize: 40,
-    color: "#233f36",
+    color: "#f5f5f3",
     fontWeight: "700",
     letterSpacing: -1,
   },
@@ -1167,51 +1121,51 @@ const s = StyleSheet.create({
     paddingHorizontal: 15,
     paddingVertical: 11,
     borderRadius: 24,
-    backgroundColor: "#eaf0e6",
+    backgroundColor: "#272727",
   },
-  chipActive: { backgroundColor: "#255d47" },
-  chipText: { fontSize: 12, fontWeight: "600", color: "#536458" },
+  chipActive: { backgroundColor: "#7064ed" },
+  chipText: { fontSize: 12, fontWeight: "600", color: "#b5b5b5" },
   button: {
     minHeight: 50,
     padding: 14,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 13,
-    backgroundColor: "#255d47",
+    backgroundColor: "#7064ed",
   },
-  secondary: { backgroundColor: "#eaf1dc" },
-  buttonText: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  secondary: { backgroundColor: "#272727" },
+  buttonText: { color: "#f5f5f3", fontSize: 14, fontWeight: "700" },
   input: {
-    backgroundColor: "#f8faf6",
+    backgroundColor: "#272727",
     borderWidth: 1,
-    borderColor: "#dce3d8",
+    borderColor: "#3d3d3d",
     padding: 14,
     borderRadius: 11,
     fontSize: 16,
-    color: "#233f36",
+    color: "#f5f5f3",
     minHeight: 50,
   },
-  label: { fontSize: 12, fontWeight: "600", color: "#68766e" },
+  label: { fontSize: 12, fontWeight: "600", color: "#b5b5b5" },
   gap: { gap: 8 },
   notice: {
     padding: 14,
     borderRadius: 10,
-    backgroundColor: "#fff0dc",
-    color: "#815323",
+    backgroundColor: "#272727",
+    color: "#ff9b90",
     fontSize: 13,
     lineHeight: 20,
   },
   upload: {
     borderWidth: 1,
     borderStyle: "dashed",
-    borderColor: "#a8baa4",
+    borderColor: "#3d3d3d",
     borderRadius: 18,
     padding: 22,
     gap: 16,
-    backgroundColor: "#eff4e9",
+    backgroundColor: "#272727",
   },
   preview: { width: "100%", height: 180 },
   receipt: { width: "100%", height: 360 },
-  divider: { height: 1, backgroundColor: "#e4e9e1" },
+  divider: { height: 1, backgroundColor: "#272727" },
 });
 

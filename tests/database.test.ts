@@ -27,7 +27,7 @@ afterAll(async () => { await db.close(); });
 
 test("migrations recreate all school and authentication tables", async () => {
   const result = await db.query<{ count: number }>("SELECT count(*)::int AS count FROM pg_tables WHERE schemaname='public'");
-  expect(result.rows[0].count).toBe(19);
+  expect(result.rows[0].count).toBe(20);
 });
 
 test("lesson status accepts rescheduled after migrations", async () => {

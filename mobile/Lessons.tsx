@@ -1,3 +1,4 @@
+import { LessonBadge } from "./StatusBadge";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -197,19 +198,19 @@ function StaffLessons({
       onPress={action}
       style={{ paddingVertical: 9 }}
     >
-      <Text style={{ color: "#245e50", fontWeight: "600" }}>{label}</Text>
+      <Text style={{ color: "#f5f5f3", fontWeight: "600" }}>{label}</Text>
     </Pressable>
   );
   return (
     <View style={{ gap: 12 }}>
-      <Text style={{ fontSize: 22, color: "#203d33", fontWeight: "600" }}>
+      <Text style={{ fontSize: 22, color: "#f5f5f3", fontWeight: "600" }}>
         {role === "teacher"
           ? "Your teaching schedule"
           : staff
             ? "School lessons"
             : "Your lessons"}
       </Text>
-      <Text style={{ color: "#748077" }}>
+      <Text style={{ color: "#b5b5b5" }}>
         Dates and times use the school’s local time (Asia/Baku).
       </Text>
       {button("Refresh lessons", () => {
@@ -221,29 +222,29 @@ function StaffLessons({
         })}
       {busy && <ActivityIndicator color="#245e50" />}
       {!!error && !editing && (
-        <Text accessibilityRole="alert" style={{ color: "#a03d2b" }}>
+        <Text accessibilityRole="alert" style={{ color: "#ff9b90" }}>
           {error}
         </Text>
       )}
-      {!busy && !lessons.length && <Text>No lessons on this page.</Text>}
+      {!busy && !lessons.length && <Text style={{ color: "#f5f5f3" }}>No lessons on this page.</Text>}
       {editing && (
         <View
           style={{
             gap: 10,
             padding: 14,
             borderWidth: 1,
-            borderColor: "#dce2d9",
+            borderColor: "#3d3d3d",
             borderRadius: 10,
           }}
         >
-          <Text style={{ fontWeight: "600" }}>
+          <Text style={{ color: "#f5f5f3", fontWeight: "600" }}>
             {editing === "new" ? "New lesson" : "Reschedule lesson"}
           </Text>
           {editing === "new" && (
             <>
-              <Text>Select an enrollment (student / course)</Text>
+              <Text style={{ color: "#f5f5f3" }}>Select an enrollment (student / course)</Text>
               {enrollments.length === 0 && (
-                <Text>Create an enrollment before scheduling a lesson.</Text>
+                <Text style={{ color: "#f5f5f3" }}>Create an enrollment before scheduling a lesson.</Text>
               )}
               {enrollments.map((e) => (
                 <Pressable
@@ -258,7 +259,7 @@ function StaffLessons({
                       enrollmentId === e.id ? "#d9e8d4" : "#f6f5ef",
                   }}
                 >
-                  <Text>
+                  <Text style={{ color: "#f5f5f3" }}>
                     {[e.student.profile.firstName, e.student.profile.lastName]
                       .filter(Boolean)
                       .join(" ") || e.studentId}{" "}
@@ -277,7 +278,7 @@ function StaffLessons({
             ] as const
           ).map(([label, value, update]) => (
             <View key={label}>
-              <Text>{label}</Text>
+              <Text style={{ color: "#f5f5f3" }}>{label}</Text>
               <TextInput
                 accessibilityLabel={label}
                 editable={!busy}
@@ -287,14 +288,14 @@ function StaffLessons({
                 style={{
                   padding: 10,
                   borderWidth: 1,
-                  borderColor: "#dce2d9",
+                  borderColor: "#3d3d3d",
                   borderRadius: 6,
                 }}
               />
             </View>
           ))}
           <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-            <Text>All day</Text>
+            <Text style={{ color: "#f5f5f3" }}>All day</Text>
             <Switch
               accessibilityLabel="All day"
               disabled={busy}
@@ -303,7 +304,7 @@ function StaffLessons({
             />
           </View>
           {!!error && (
-            <Text accessibilityRole="alert" style={{ color: "#a03d2b" }}>
+            <Text accessibilityRole="alert" style={{ color: "#ff9b90" }}>
               {error}
             </Text>
           )}
@@ -344,15 +345,15 @@ function StaffLessons({
           key={lesson.id}
           style={{
             padding: 14,
-            backgroundColor: "#f0f4ed",
+            backgroundColor: "#272727",
             borderRadius: 10,
             gap: 6,
           }}
         >
-          <Text style={{ fontWeight: "600" }}>
+          <Text style={{ color: "#f5f5f3", fontWeight: "600" }}>
             {lesson.enrollment.course.name}
           </Text>
-          <Text>
+          <Text style={{ color: "#f5f5f3" }}>
             {lesson.date}
             {lesson.endDate && lesson.endDate !== lesson.date
               ? ` – ${lesson.endDate}`
@@ -362,7 +363,7 @@ function StaffLessons({
               ? "All day"
               : `${lesson.startTime}–${lesson.endTime || "End unspecified"}`}
           </Text>
-          <Text>
+          <Text style={{ color: "#f5f5f3" }}>
             Student:{" "}
             {[
               lesson.enrollment.student.profile.firstName,
@@ -371,17 +372,17 @@ function StaffLessons({
               .filter(Boolean)
               .join(" ") || "Student"}
           </Text>
-          <Text>
+          <Text style={{ color: "#f5f5f3" }}>
             Teacher:{" "}
             {[lesson.teacher.profile.firstName, lesson.teacher.profile.lastName]
               .filter(Boolean)
               .join(" ") || "Teacher"}
           </Text>
-          <Text>{lesson.status === "scheduled" && lesson.rescheduledAt ? "Rescheduled" : lesson.status}</Text>
+          <LessonBadge lesson={lesson} />
           {button("Delete lesson", () =>
             Alert.alert(
               "Delete lesson?",
-              "Permanently remove this lesson or every lesson you can manage in its recurring series? Lessons with progress records cannot be deleted.",
+              "Permanently remove this lesson or every lesson you can manage in its recurring series? Lessons with progress records, performance evaluations, or rescheduling history cannot be deleted.",
               [
                 { text: "Go back", style: "cancel" },
                 {

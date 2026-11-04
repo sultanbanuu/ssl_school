@@ -1,4 +1,5 @@
 import { expo } from "@better-auth/expo";
+import { phoneSchema } from "../../shared/phone";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import type { Config } from "../../config";
@@ -18,6 +19,7 @@ export function createAuth(db: PrismaClient, config: Config) {
             create: {
               firstName: args.data.firstName || args.data.name,
               lastName: args.data.lastName,
+              phone: args.data.phone,
               role: "student",
               student: { create: {} },
             },
@@ -41,6 +43,7 @@ export function createAuth(db: PrismaClient, config: Config) {
     rateLimit: { enabled: true },
     user: {
       additionalFields: {
+        phone: { type: "string", required: true, validator: { input: phoneSchema }, returned: false },
         firstName: {
           type: "string",
           required: true,

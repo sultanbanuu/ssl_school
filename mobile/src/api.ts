@@ -3,9 +3,9 @@ import { apiURL, authClient } from '../auth-client';
 
 export const baseURL = apiURL;
 export const auth = authClient;
-export type Profile = { id: string; firstName: string | null; role: 'student' | 'admin' | 'manager' | 'teacher' };
+export type Profile = { id: string; email?: string; firstName: string | null; lastName?: string | null; phone?: string | null; profilePhotoUrl?: string | null; role: 'student' | 'admin' | 'manager' | 'teacher' };
 export type Course = { courseId: string; name: string; monthlyPrice: string };
-export type Payment = { id: string; studentId: string; courseId: string; courseName: string | null; amount: string; status: 'pending' | 'approved' | 'cancelled'; submittedAt: string | null; startDate: string | null; endDate: string | null; cancellationReason: string | null; receiptAvailable: boolean; availableActions: ('approve' | 'cancel')[] };
+export type Payment = { id: string; studentId: string; studentName: string | null; courseId: string; courseName: string | null; amount: string; status: 'pending' | 'approved' | 'cancelled'; submittedAt: string | null; startDate: string | null; endDate: string | null; cancellationReason: string | null; receiptAvailable: boolean; availableActions: ('approve' | 'cancel')[] };
 export type Upload = { uploadId: string; uploadUrl: string; headers: Record<string, string>; amount: string; courseName: string; submitBefore: string };
 export class ApiError extends Error { constructor(message: string, public status: number) { super(message); } }
 export async function api<T>(path: string, body?: unknown, method = 'POST'): Promise<T> {

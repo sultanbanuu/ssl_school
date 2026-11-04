@@ -810,22 +810,6 @@ function LessonCalendar({
           >
             Today
           </button>
-          <button
-            className="cal-button"
-            aria-label="Previous week"
-            disabled={saving}
-            onClick={() => navigateWeek(addDays(week, -7))}
-          >
-            ‹
-          </button>
-          <button
-            className="cal-button"
-            aria-label="Next week"
-            disabled={saving}
-            onClick={() => navigateWeek(addDays(week, 7))}
-          >
-            ›
-          </button>
           <span className="cal-range" data-week={week}>
             {pretty(week, { day: "numeric", month: "short" })} –{" "}
             {pretty(addDays(week, 6), {

@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { Payment, Prisma, PrismaClient } from "../../generated/prisma/client";
+import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 import type { ReceiptStorage } from "../../receipt-storage";
 import { HttpError, type Actor } from "../../shared/authorization";
 import type {
@@ -34,10 +34,17 @@ export function addCalendarMonths(date: Date, months: number) {
   result.setUTCDate(Math.min(day, lastDay));
   return result;
 }
-function serialize(payment: Payment, actor?: Actor) {
+const studentNameInclude = {
+  student: { select: { profile: { select: { firstName: true, lastName: true } } } },
+} satisfies Prisma.PaymentInclude;
+type PaymentWithStudent = Prisma.PaymentGetPayload<{ include: typeof studentNameInclude }>;
+
+function serialize(payment: PaymentWithStudent, actor?: Actor) {
   return {
     id: payment.id,
     studentId: payment.studentId,
+    studentName: [payment.student.profile.firstName, payment.student.profile.lastName]
+      .map((name) => name?.trim()).filter(Boolean).join(" ") || null,
     courseId: payment.courseId,
     courseName: payment.courseName,
     amount: payment.amount.toFixed(2),
@@ -157,6 +164,7 @@ export function createPaymentService(db: PrismaClient, receipts?: ReceiptStorage
         throw new HttpError(404, "Upload not found");
       const existing = await db.payment.findUnique({
         where: { uploadId: upload.id },
+        include: studentNameInclude,
       });
       if (existing)
         return { created: false, payment: serialize(existing) };
@@ -165,12 +173,13 @@ export function createPaymentService(db: PrismaClient, receipts?: ReceiptStorage
       await eligible(db, studentId, upload.courseId);
       const store = storage();
       const receiptKey = await store.finalize(upload.objectKey, upload.contentType, upload.size);
-      let result: Payment;
+      let result: PaymentWithStudent;
       try {
         result = await db.$transaction(async (tx) => {
           await tx.$queryRaw`SELECT id FROM payment_uploads WHERE id = ${upload.id}::uuid FOR UPDATE`;
           const previous = await tx.payment.findUnique({
             where: { uploadId: upload.id },
+            include: studentNameInclude,
           });
           if (previous)
             return previous;
@@ -178,6 +187,7 @@ export function createPaymentService(db: PrismaClient, receipts?: ReceiptStorage
             throw new HttpError(422, "Upload expired; start a new upload");
           await eligible(tx, studentId, upload.courseId);
           return tx.payment.create({
+            include: studentNameInclude,
             data: {
               studentId,
               courseId: upload.courseId,
@@ -208,6 +218,7 @@ export function createPaymentService(db: PrismaClient, receipts?: ReceiptStorage
         where.status = query.status;
       const records = await db.payment.findMany({
         where,
+        include: studentNameInclude,
         orderBy: [
           { submittedAt: { sort: "desc", nulls: "last" } },
           { id: "asc" },
@@ -220,6 +231,7 @@ export function createPaymentService(db: PrismaClient, receipts?: ReceiptStorage
     async get(actor: Actor, params: z.output<typeof idParams>) {
       const payment = await db.payment.findFirst({
         where: { AND: [{ id: params.id }, scope(actor)] },
+        include: studentNameInclude,
       });
       if (!payment)
         throw new HttpError(404, "Payment not found");
@@ -284,7 +296,7 @@ export function createPaymentService(db: PrismaClient, receipts?: ReceiptStorage
         });
         if (updated.count !== 1)
           throw new HttpError(409, "Payment has already been reviewed");
-        return tx.payment.findUniqueOrThrow({ where: { id: current.id } });
+        return tx.payment.findUniqueOrThrow({ where: { id: current.id }, include: studentNameInclude });
       });
       return serialize(payment, actor);
     }

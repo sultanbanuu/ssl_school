@@ -56,7 +56,7 @@ export function Availability({
       onPress={action}
       style={[s.button, selected && s.selected, state.busy && { opacity: 0.5 }]}
     >
-      <Text style={[s.buttonText, danger && { color: "#a03d2b" }]}>
+      <Text style={[s.buttonText, danger && { color: "#ff9b90" }]}>
         {label}
       </Text>
     </Pressable>
@@ -364,10 +364,10 @@ export function Availability({
 }
 const s = StyleSheet.create({
   page: { gap: 16, width: "100%" },
-  title: { fontSize: 24, fontWeight: "600", color: "#203d33" },
-  subtitle: { fontSize: 16, fontWeight: "600", color: "#203d33" },
-  muted: { color: "#63776b", lineHeight: 21, flexShrink: 1 },
-  time: { color: "#245d48", fontWeight: "600", lineHeight: 23 },
+  title: { fontSize: 24, fontWeight: "600", color: "#f5f5f3" },
+  subtitle: { fontSize: 16, fontWeight: "600", color: "#f5f5f3" },
+  muted: { color: "#b5b5b5", lineHeight: 21, flexShrink: 1 },
+  time: { color: "#f5f5f3", fontWeight: "600", lineHeight: 23 },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   button: {
     minHeight: 44,
@@ -375,36 +375,36 @@ const s = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: "#e8f0e9",
+    backgroundColor: "#272727",
     maxWidth: "100%",
   },
-  buttonText: { color: "#245d48", fontWeight: "600", flexShrink: 1 },
-  selected: { borderWidth: 1, borderColor: "#245d48" },
+  buttonText: { color: "#f5f5f3", fontWeight: "600", flexShrink: 1 },
+  selected: { borderWidth: 1, borderColor: "#3d3d3d" },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 14 },
   card: {
     width: "100%",
     padding: 16,
     borderRadius: 14,
-    backgroundColor: "#fff",
+    backgroundColor: "#272727",
     borderWidth: 1,
-    borderColor: "#dce4dd",
+    borderColor: "#3d3d3d",
     gap: 10,
   },
   column: { width: "48%", flexGrow: 1, flexBasis: "45%" },
   fields: { gap: 12 },
   field: { flex: 1, minWidth: 0, gap: 6 },
   input: {
-    backgroundColor: "#f8faf7",
+    backgroundColor: "#272727",
     borderWidth: 1,
-    borderColor: "#dce4dd",
+    borderColor: "#3d3d3d",
     borderRadius: 10,
     padding: 12,
     minHeight: 48,
-    color: "#203d33",
+    color: "#f5f5f3",
   },
   error: {
-    color: "#a03d2b",
-    backgroundColor: "#fff1eb",
+    color: "#ff9b90",
+    backgroundColor: "#272727",
     padding: 12,
     borderRadius: 10,
   },

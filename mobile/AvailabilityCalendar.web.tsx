@@ -59,8 +59,8 @@ export function AvailabilityCalendar({
               <div
                 key={date}
                 style={{
-                  borderTop: "1px solid #e4eae5",
-                  borderLeft: "1px solid #e4eae5",
+                  borderTop: "1px solid #393939",
+                  borderLeft: "1px solid #393939",
                   minHeight: 72,
                   padding: 5,
                 }}

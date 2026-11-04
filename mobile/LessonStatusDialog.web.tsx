@@ -151,7 +151,7 @@ export function LessonStatusDialog({
               </label>
               <p>
                 {deleting
-                  ? "Permanently deletes every lesson you can manage in this series, including earlier, future, completed and cancelled lessons. If any has progress records, nothing is deleted."
+                  ? "Permanently deletes every lesson you can manage in this series, including earlier, future, completed and cancelled lessons. If any has progress records, performance evaluations, or rescheduling history, nothing is deleted."
                   : "This includes earlier and future dates in this recurring series. Completed and cancelled lessons stay unchanged."}
               </p>
             </>

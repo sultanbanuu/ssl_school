@@ -1,3 +1,4 @@
+import { phoneSchema } from "../src/shared/phone";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -24,6 +25,7 @@ type Profile = Awaited<ReturnType<typeof getProfile>>;
 export default function App() {
   const [mode, setMode] = useState<"signup" | "signin">("signup");
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
   const [surname, setSurname] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [learningTime, setLearningTime] = useState("");
@@ -82,6 +84,7 @@ export default function App() {
       return setError("Enter your name (up to 160 characters).");
     if (signup && (!surname.trim() || surname.trim().length > 160))
       return setError("Enter your surname (up to 160 characters).");
+    if (signup && !phoneSchema.safeParse(phone).success) return setError("Enter your phone number with country code, e.g. +994501234567.");
     if (signup && !birthDateSchema.safeParse(birthDate).success)
       return setError(
         "Enter a valid birth date in YYYY-MM-DD format that is not in the future.",
@@ -101,6 +104,7 @@ export default function App() {
             name: `${name.trim()} ${surname.trim()}`,
             firstName: name.trim(),
             lastName: surname.trim(),
+            phone: phoneSchema.parse(phone),
             birthDate,
             learningTime,
             email: cleanEmail,
@@ -111,6 +115,8 @@ export default function App() {
         setError(
           result.error.status === 429
             ? "Too many attempts. Please wait a moment and try again."
+            : result.error.status >= 500
+              ? "The school server couldn't process sign-in. Please try again shortly or contact the school."
             : result.error.message || "Unable to sign in. Please try again.",
         );
         return;
@@ -165,7 +171,7 @@ export default function App() {
       style={s.page}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="light-content" />
       <ScrollView
         contentContainerStyle={s.scroll}
         keyboardShouldPersistTaps="handled"
@@ -281,6 +287,9 @@ export default function App() {
                         maxLength={160}
                       />
                       <Field
+                        label="Phone number" value={phone} onChangeText={setPhone} placeholder="+994 50 123 45 67" keyboardType="phone-pad" autoComplete="tel" editable={!busy} maxLength={32}
+                      />
+                      <Field
                         label="Birth date (YYYY-MM-DD)"
                         value={birthDate}
                         onChangeText={setBirthDate}
@@ -316,12 +325,12 @@ export default function App() {
                               style={[
                                 s.input,
                                 learningTime === option && {
-                                  backgroundColor: "#e1eee6",
-                                  borderColor: "#245e50",
+                                  backgroundColor: "#272727",
+                                  borderColor: "#3d3d3d",
                                 },
                               ]}
                             >
-                              <Text style={{ color: "#203d33" }}>{option}</Text>
+                              <Text style={{ color: "#f5f5f3" }}>{option}</Text>
                             </Pressable>
                           ))}
                         </View>
@@ -459,7 +468,7 @@ function Field({
   );
 }
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: "#f6f5ef" },
+  page: { flex: 1, backgroundColor: "#272727" },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: 22,
@@ -475,17 +484,17 @@ const s = StyleSheet.create({
     marginBottom: 42,
   },
   logo: {
-    backgroundColor: "#245e50",
+    backgroundColor: "#7064ed",
     width: 38,
     height: 38,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
-  logoText: { color: "#fff", fontSize: 28, fontWeight: "700" },
-  brandName: { fontSize: 24, fontWeight: "700", color: "#1e3931" },
-  brandDot: { color: "#c47747" },
-  brandTag: { fontSize: 9, letterSpacing: 2, color: "#73817a", marginLeft: 10 },
+  logoText: { color: "#f5f5f3", fontSize: 28, fontWeight: "700" },
+  brandName: { fontSize: 24, fontWeight: "700", color: "#f5f5f3" },
+  brandDot: { color: "#ff9b90" },
+  brandTag: { fontSize: 9, letterSpacing: 2, color: "#b5b5b5", marginLeft: 10 },
   layout: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -496,7 +505,7 @@ const s = StyleSheet.create({
   eyebrow: {
     fontSize: 10,
     letterSpacing: 1.6,
-    color: "#637c70",
+    color: "#b5b5b5",
     fontWeight: "700",
     marginBottom: 20,
   },
@@ -505,13 +514,13 @@ const s = StyleSheet.create({
     lineHeight: 57,
     fontWeight: "600",
     letterSpacing: -2,
-    color: "#203d33",
+    color: "#f5f5f3",
   },
-  heroAccent: { color: "#bb7046", fontStyle: "italic" },
+  heroAccent: { color: "#ff9b90", fontStyle: "italic" },
   introCopy: {
     fontSize: 16,
     lineHeight: 26,
-    color: "#64746b",
+    color: "#b5b5b5",
     maxWidth: 365,
     marginTop: 24,
   },
@@ -520,28 +529,28 @@ const s = StyleSheet.create({
     alignItems: "center",
     gap: 14,
     marginTop: 32,
-    backgroundColor: "#e9eee4",
+    backgroundColor: "#272727",
     padding: 19,
     borderRadius: 16,
     maxWidth: 370,
   },
-  noteIcon: { fontSize: 28, color: "#58784e" },
-  noteTitle: { fontSize: 14, fontWeight: "600", color: "#2c4c3d" },
-  noteCopy: { fontSize: 12, color: "#6c7c6d", marginTop: 5 },
+  noteIcon: { fontSize: 28, color: "#b5b5b5" },
+  noteTitle: { fontSize: 14, fontWeight: "600", color: "#f5f5f3" },
+  noteCopy: { fontSize: 12, color: "#b5b5b5", marginTop: 5 },
   introFooter: {
     fontSize: 9,
     letterSpacing: 3,
-    color: "#8b968c",
+    color: "#b5b5b5",
     marginTop: 34,
   },
   card: {
     flexGrow: 1,
     flexBasis: 360,
-    backgroundColor: "#fff",
+    backgroundColor: "#272727",
     padding: 28,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: "#e6e9e0",
+    borderColor: "#3d3d3d",
     gap: 18,
     maxWidth: 510,
   },
@@ -550,19 +559,19 @@ const s = StyleSheet.create({
     letterSpacing: -0.8,
     lineHeight: 35,
     fontWeight: "600",
-    color: "#203d33",
+    color: "#f5f5f3",
   },
-  subtitle: { fontSize: 14, lineHeight: 22, color: "#748077" },
-  label: { fontSize: 12, color: "#374c40", fontWeight: "600", marginBottom: 8 },
+  subtitle: { fontSize: 14, lineHeight: 22, color: "#b5b5b5" },
+  label: { fontSize: 12, color: "#f5f5f3", fontWeight: "600", marginBottom: 8 },
   input: {
-    backgroundColor: "#fcfcfa",
+    backgroundColor: "#272727",
     borderWidth: 1,
-    borderColor: "#dce2d9",
+    borderColor: "#3d3d3d",
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 14,
     fontSize: 15,
-    color: "#203d33",
+    color: "#f5f5f3",
     minHeight: 49,
   },
   passwordLabel: {
@@ -570,31 +579,31 @@ const s = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  hint: { fontSize: 11, lineHeight: 18, color: "#7c877e", marginTop: 6 },
+  hint: { fontSize: 11, lineHeight: 18, color: "#b5b5b5", marginTop: 6 },
   primary: {
-    backgroundColor: "#245e50",
+    backgroundColor: "#7064ed",
     borderRadius: 11,
     minHeight: 52,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 5,
   },
-  primaryText: { fontSize: 14, fontWeight: "600", color: "#fff" },
+  primaryText: { fontSize: 14, fontWeight: "600", color: "#f5f5f3" },
   link: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#245e50",
+    color: "#f5f5f3",
     paddingVertical: 5,
   },
   error: {
-    backgroundColor: "#fff1eb",
-    color: "#a03d2b",
+    backgroundColor: "#272727",
+    color: "#ff9b90",
     padding: 12,
     borderRadius: 8,
     fontSize: 13,
     lineHeight: 20,
   },
-  divider: { height: 1, backgroundColor: "#eef0e9", marginTop: 5 },
+  divider: { height: 1, backgroundColor: "#272727", marginTop: 5 },
   switchRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -602,15 +611,15 @@ const s = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
   },
-  switchText: { fontSize: 12, color: "#7c877e" },
+  switchText: { fontSize: 12, color: "#b5b5b5" },
   footer: {
     textAlign: "center",
-    color: "#929b91",
+    color: "#b5b5b5",
     fontSize: 11,
     marginTop: 32,
   },
   loading: { paddingVertical: 70, alignItems: "center", gap: 16 },
-  account: { backgroundColor: "#f0f4ed", padding: 20, borderRadius: 12 },
-  accountRole: { fontSize: 22, color: "#245e50", fontWeight: "600" },
+  account: { backgroundColor: "#272727", padding: 20, borderRadius: 12 },
+  accountRole: { fontSize: 22, color: "#f5f5f3", fontWeight: "600" },
   secondary: { alignItems: "center", padding: 12 },
 });

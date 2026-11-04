@@ -16,6 +16,7 @@ import { lessonRoutes } from "./modules/lessons/routes";
 import { reschedulingRoutes } from "./modules/rescheduling/routes";
 import { paymentRoutes } from "./modules/payments/routes";
 import { notificationRoutes } from "./modules/notifications/routes";
+import { performanceRoutes } from "./modules/performance/routes";
 import type { ReceiptStorage } from "./receipt-storage";
 
 type Dependencies = {
@@ -85,6 +86,7 @@ export function createApp({
     .use(availabilityRoutes(db, actorFor))
     .use(paymentRoutes(db, actorFor, receipts))
     .use(notificationRoutes(db, actorFor))
+    .use(performanceRoutes(db, actorFor))
     .use(profileRoutes(db, actorFor))
     .use(courseRoutes(db, actorFor))
     .use(enrollmentRoutes(db, actorFor));

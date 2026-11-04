@@ -25,11 +25,21 @@ test("liveness remains public and does not access auth or the database", async (
 
 test("readiness returns 200 after the database probe succeeds", async () => {
   let probes = 0;
-  const api = app({ db: { $queryRaw: async () => { probes++; return []; } } as unknown as PrismaClient });
+  const api = app({ db: { $queryRaw: async () => { probes++; return []; }, user: { findFirst: async () => { probes++; return null; } } } as unknown as PrismaClient });
   const response = await api.handle(new Request("http://localhost/ready"));
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ status: "ready" });
-  expect(probes).toBe(1);
+  expect(probes).toBe(2);
+});
+
+test("readiness rejects a reachable database with missing auth columns", async () => {
+  const api = app({ db: {
+    $queryRaw: async () => [{ result: 1 }],
+    user: { findFirst: async () => { throw new Error("column auth_users.phone does not exist"); } },
+  } as unknown as PrismaClient });
+  const response = await api.handle(new Request("http://localhost/ready"));
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ status: "unavailable" });
 });
 
 test("readiness returns 503 without exposing database errors", async () => {
@@ -67,12 +77,12 @@ test("profile module returns the authenticated user's profile", async () => {
   const calls: unknown[] = [];
   const api = app({
     getSession: async () => ({ user: { id: userId } }),
-    db: { profile: { findUnique: async (args: unknown) => { calls.push(args); return profile; } } } as unknown as PrismaClient,
+    db: { profile: { findUnique: async (args: unknown) => { calls.push(args); return { ...profile, user: { email: "student@gmail.com" } }; } } } as unknown as PrismaClient,
   });
   const response = await api.handle(new Request("http://localhost/api/me"));
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual(profile);
-  expect(calls).toEqual(Array(2).fill({ where: { id: userId }, include: { student: true, teacher: true } }));
+  expect(await response.json()).toEqual({ ...profile, email: "student@gmail.com" });
+  expect(calls).toEqual([{ where: { id: userId }, include: { student: true, teacher: true } }, { where: { id: userId }, include: { student: true, teacher: true, user: { select: { email: true } } } }]);
 });
 
 test("profile module rejects anonymous and unprovisioned accounts", async () => {

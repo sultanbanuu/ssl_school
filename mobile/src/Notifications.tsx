@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -11,7 +12,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { api, Profile } from "./api";
 
 type Notification = {
@@ -50,7 +51,7 @@ export function Notifications({ profile, onCount }: { profile: Profile; onCount?
   const [detail, setDetail] = useState<Notification | null>(null);
   const [items, setItems] = useState<Notification[]>([]);
   const [count, setCount] = useState(0);
-  const [unread, setUnread] = useState(false);
+  const unread = false;
   const [loading, setLoading] = useState(true);
   const [more, setMore] = useState(false);
   const [error, setError] = useState("");
@@ -165,26 +166,7 @@ export function Notifications({ profile, onCount }: { profile: Profile; onCount?
           />
         }
       >
-        <Text style={s.eyebrow}>YOUR SCHOOL, CONNECTED</Text>
-        <Text style={s.title}>Notifications</Text>
-        <Text style={s.body}>
-          A little closer to everything happening at school.
-        </Text>
-        <View style={s.hero}>
-          <Text style={s.heroLabel}>YOUR INBOX</Text>
-          <Text style={s.heroTitle}>
-            {loading
-              ? "Checking for updates…"
-              : count
-                ? `${count} unread update${count === 1 ? "" : "s"}`
-                : error
-                  ? "Inbox unavailable"
-                  : "You’re all caught up."}
-          </Text>
-          <Text style={s.heroBody}>
-            Announcements and messages, in one place.
-          </Text>
-        </View>
+        <Text accessibilityRole="header" style={s.title}>Notifications</Text>
         {["admin", "manager"].includes(profile.role) && (
           <Action
             title="+  Send a school update"
@@ -192,26 +174,7 @@ export function Notifications({ profile, onCount }: { profile: Profile; onCount?
           />
         )}
         <View style={s.row}>
-          {[false, true].map((value) => (
-            <Pressable
-              key={String(value)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: unread === value }}
-              onPress={() => setUnread(value)}
-              style={[s.chip, unread === value && s.activeChip]}
-            >
-              <Text style={[s.link, unread === value && s.white]}>
-                {value ? "Unread" : "All updates"}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-        <View style={s.row}>
-          <Action
-            title="Refresh"
-            onPress={() => void load()}
-            disabled={loading}
-          />
+          <View style={[s.chip, s.activeChip]}><Text style={s.link}>All updates</Text></View>
           <Action
             title={saving ? "Updating…" : "Mark all as read"}
             onPress={() => void read()}
@@ -249,42 +212,17 @@ export function Notifications({ profile, onCount }: { profile: Profile; onCount?
             {unread && (
               <Action
                 title="View all updates"
-                onPress={() => setUnread(false)}
+                onPress={() => void load()}
               />
             )}
           </View>
         ) : (
           items.map((item) => (
-            <View key={item.id} style={[s.card, !item.isRead && s.unread]}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`${item.isRead ? "Read" : "Unread"}: ${item.title}. Open message`}
-                onPress={() => setDetail(item)}
-                style={s.message}
-              >
-                <View style={s.row}>
-                  <Text style={s.eyebrow}>SCHOOL UPDATE</Text>
-                  <Text style={s.small}>
-                    {item.isRead ? "Read" : "● Unread"}
-                  </Text>
-                </View>
-                <Text style={s.heading}>{item.title}</Text>
-                <Text numberOfLines={2} style={s.body}>
-                  {item.message}
-                </Text>
-                <Text style={s.small}>
-                  {new Date(item.createdAt).toLocaleString()}
-                </Text>
-                <Text style={s.link}>Open message →</Text>
-              </Pressable>
-              {!item.isRead && (
-                <Action
-                  title="Mark as read"
-                  disabled={saving || loading}
-                  onPress={() => void read(item.id)}
-                />
-              )}
-            </View>
+            <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`${item.isRead ? "Read" : "Unread"}: ${item.title}. Open message`} onPress={() => setDetail(item)} style={s.notificationRow}>
+              <View style={s.notificationIcon}><Ionicons name="school-outline" size={24} color="#fff" /></View>
+              <View style={{ flex: 1, minWidth: 0, gap: 8 }}><Text numberOfLines={1} style={s.heading}>{item.title}</Text><Text style={s.small}>{new Date(item.createdAt).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</Text></View>
+              {!item.isRead && <View style={s.unreadDot} />}
+            </Pressable>
           ))
         )}
         {more && (
@@ -300,25 +238,22 @@ export function Notifications({ profile, onCount }: { profile: Profile; onCount?
         animationType="slide"
         onRequestClose={() => { if (!composeSending.current) setComposing(false); }}
       >
-        <SafeAreaView style={s.screen}>
+        <SafeAreaProvider><SafeAreaView style={s.screen}>
           <Compose
             sending={composeSending}
             close={() => setComposing(false)}
             sent={() => void latestLoad.current()}
           />
-        </SafeAreaView>
+        </SafeAreaView></SafeAreaProvider>
       </Modal>
       <Modal
         visible={!!detail}
         animationType="slide"
         onRequestClose={() => setDetail(null)}
       >
-        <SafeAreaView style={s.screen}>
+        <SafeAreaProvider><SafeAreaView style={s.screen}>
           <ScrollView contentContainerStyle={s.content}>
-            <Action
-              title="‹  Back to notifications"
-              onPress={() => setDetail(null)}
-            />
+            <Pressable accessibilityRole="button" accessibilityLabel="Back to notifications" onPress={() => setDetail(null)} style={s.backButton}><Ionicons name="chevron-back" size={22} color="#f5f5f3" /><Text style={s.link}>Back to notifications</Text></Pressable>
             {detail && (
               <>
                 <Text style={s.eyebrow}>
@@ -348,7 +283,7 @@ export function Notifications({ profile, onCount }: { profile: Profile; onCount?
               </>
             )}
           </ScrollView>
-        </SafeAreaView>
+        </SafeAreaView></SafeAreaProvider>
       </Modal>
     </>
   );
@@ -534,64 +469,68 @@ function Compose({ close, sent, sending }: { close: () => void; sent: () => void
   );
 }
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#f7f8f4" },
+  backButton: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 8, minHeight: 48 },
+  notificationRow: { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "#2d2d2d", borderRadius: 20, padding: 18, minHeight: 92 },
+  notificationIcon: { width: 46, height: 46, borderRadius: 23, backgroundColor: "#7064ed", alignItems: "center", justifyContent: "center" },
+  unreadDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: "#ff566a" },
+  screen: { flex: 1, backgroundColor: "#272727" },
   message: { gap: 12 },
   eyebrow: {
     fontSize: 10,
     fontWeight: "800",
     letterSpacing: 1.5,
-    color: "#617569",
+    color: "#b5b5b5",
   },
-  hero: { backgroundColor: "#204e3e", padding: 24, borderRadius: 22, gap: 12 },
+  hero: { backgroundColor: "#7064ed", padding: 22, borderRadius: 22, gap: 12 },
   heroLabel: {
-    color: "#c2d68f",
+    color: "#b5b5b5",
     fontSize: 10,
     letterSpacing: 2,
     fontWeight: "700",
   },
-  heroTitle: { color: "#fff", fontSize: 26, fontWeight: "600" },
-  heroBody: { color: "#d0dfd4", fontSize: 14, lineHeight: 22 },
+  heroTitle: { color: "#f5f5f3", fontSize: 26, fontWeight: "600" },
+  heroBody: { color: "#b5b5b5", fontSize: 14, lineHeight: 22 },
   chip: {
     paddingHorizontal: 20,
     paddingVertical: 13,
     borderRadius: 24,
-    backgroundColor: "#eaf0e6",
+    backgroundColor: "#272727",
   },
-  activeChip: { backgroundColor: "#255d47" },
-  white: { color: "#fff" },
-  emptyIcon: { fontSize: 32, color: "#255d47" },
-  messageBody: { fontSize: 17, lineHeight: 28, color: "#233f36" },
+  activeChip: { backgroundColor: "#7064ed" },
+  white: { color: "#f5f5f3" },
+  emptyIcon: { fontSize: 32, color: "#f5f5f3" },
+  messageBody: { fontSize: 17, lineHeight: 28, color: "#f5f5f3" },
   content: {
-    padding: 24,
+    padding: 22,
     gap: 18,
     paddingBottom: 48,
     width: "100%",
-    maxWidth: 680,
+    maxWidth: 700,
     alignSelf: "center",
   },
-  title: { fontSize: 36, fontWeight: "700", color: "#183f31" },
-  heading: { fontSize: 18, fontWeight: "700", color: "#233f36" },
-  body: { fontSize: 15, color: "#68766e", lineHeight: 23 },
-  small: { fontSize: 12, color: "#748178" },
+  title: { textAlign: "left", fontSize: 28, fontWeight: "700", color: "#f5f5f3" },
+  heading: { fontSize: 18, fontWeight: "700", color: "#f5f5f3" },
+  body: { fontSize: 15, color: "#b5b5b5", lineHeight: 23 },
+  small: { fontSize: 12, color: "#b5b5b5" },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: "#272727",
     padding: 20,
     gap: 14,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#e4e9e1",
+    borderColor: "#3d3d3d",
   },
-  unread: { backgroundColor: "#edf4e9", borderColor: "#a8baa4" },
-  action: { padding: 12, borderRadius: 10, backgroundColor: "#eaf1dc" },
-  link: { color: "#255d47", fontWeight: "700" },
+  unread: { backgroundColor: "#272727", borderColor: "#3d3d3d" },
+  action: { padding: 12, borderRadius: 10, backgroundColor: "#272727" },
+  link: { color: "#f5f5f3", fontWeight: "700" },
   input: {
     padding: 14,
     borderRadius: 11,
     borderWidth: 1,
-    borderColor: "#dce3d8",
-    color: "#233f36",
+    borderColor: "#3d3d3d",
+    color: "#f5f5f3",
     fontSize: 16,
   },
-  error: { color: "#815323", padding: 14, backgroundColor: "#fff0dc" },
+  error: { color: "#ff9b90", padding: 14, backgroundColor: "#272727" },
 });

@@ -34,8 +34,8 @@ function fixture(role = "admin", actorTeacherId = teacherId) {
     enrollment: { findUnique: async ({ where }: any) => where.id === otherEnrollmentId ? { ...enrollment, id: otherEnrollmentId, studentId: "another-student" } : enrollment },
     teacher: { findUnique: async ({ where }: any) => [teacherId, alternateTeacherId].includes(where.id) ? { id: where.id } : null },
     lesson: {
-      findMany: async (args: any) => rows.filter(row => matches(row, args.where)).slice(args.skip || 0, (args.skip || 0) + (args.take || rows.length)).map(row => args.include?._count ? { ...row, _count: { progress: row.progressCount || 0 } } : row),
-      findFirst: async (args: any) => { const row = rows.find(row => matches(row, args.where)); return row ? { ...row, _count: { progress: row.progressCount || 0 } } : null; },
+      findMany: async (args: any) => rows.filter(row => matches(row, args.where)).slice(args.skip || 0, (args.skip || 0) + (args.take || rows.length)).map(row => args.include?._count ? { ...row, _count: { progress: row.progressCount || 0, evaluations: row.evaluationCount || 0, rescheduleRequests: row.rescheduleCount || 0 } } : row),
+      findFirst: async (args: any) => { const row = rows.find(row => matches(row, args.where)); return row ? { ...row, _count: { progress: row.progressCount || 0, evaluations: row.evaluationCount || 0, rescheduleRequests: row.rescheduleCount || 0 } } : null; },
       deleteMany: async ({ where }: any) => { rows = rows.filter(row => !matches(row, where)); return {}; },
       findUniqueOrThrow: async (args: any) => rows.find(row => row.id === args.where.id),
       create: async ({ data }: any) => { const row = { id: crypto.randomUUID(), status: "scheduled", enrollment: data.enrollmentId === otherEnrollmentId ? { ...enrollment, id: otherEnrollmentId, studentId: "another-student" } : enrollment, teacher: { profileId: data.teacherId }, ...data }; rows.push(row); return row; },
@@ -63,6 +63,22 @@ describe("calendar dates", () => {
   });
 });
 describe("calendar booking transactions", () => {
+  test("series deletion preserves evaluations and rescheduling history with actionable errors", async () => {
+    for (const [field, message] of [["evaluationCount", "saved performance evaluation"], ["rescheduleCount", "rescheduling history"]] as const) {
+      const f = fixture();
+      await f.create({ repeat: { frequency: "daily", interval: 1, until: "2026-11-04" } });
+      const [first, protectedLesson] = f.rows();
+      protectedLesson[field] = 1;
+      const response = await f.request("DELETE", undefined, "/" + first.id + "?scope=all");
+      expect(response.status).toBe(409);
+      expect((await response.json()).error).toContain(message);
+      expect(f.rows()).toHaveLength(3);
+      expect((await f.request("DELETE", undefined, "/" + protectedLesson.id)).status).toBe(409);
+      expect((await f.request("DELETE", undefined, "/" + first.id)).status).toBe(200);
+      expect(f.rows()).toHaveLength(2);
+      expect(f.rows().find(row => row.id === protectedLesson.id)?.[field]).toBe(1);
+    }
+  });
   test("pending and approved trials prevent conflicting regular lesson creation and moves", async () => {
     const f = fixture();
     await f.create(); const id = f.rows()[0].id;

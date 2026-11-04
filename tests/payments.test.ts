@@ -71,6 +71,7 @@ function fixture(role: Role | null = "student") {
         record("create", data);
         state.payment = {
           id,
+          student: { profile: { firstName: "Ayla", lastName: "Aliyeva" } },
           startDate: null,
           endDate: null,
           reviewedAt: null,
@@ -134,6 +135,7 @@ function fixture(role: Role | null = "student") {
   const seed = () => {
     state.payment = {
       id,
+      student: { profile: { firstName: "Ayla", lastName: "Aliyeva" } },
       studentId,
       courseId,
       receiptKey: "receipts/a",
@@ -148,6 +150,27 @@ function fixture(role: Role | null = "student") {
 }
 
 describe("monthly payment flow", () => {
+  test("payment list, details and review include the student's full name", async () => {
+    const f = fixture("admin");
+    f.seed();
+    const list = await f.request("/api/payments");
+    expect(list.status).toBe(200);
+    expect(await list.json()).toMatchObject([{ studentName: "Ayla Aliyeva" }]);
+    const detail = await f.request(`/api/payments/${id}`);
+    expect(detail.status).toBe(200);
+    expect(await detail.json()).toMatchObject({ studentName: "Ayla Aliyeva" });
+    const review = await f.request(`/api/payments/${id}/review`, { status: "cancelled" }, "PATCH");
+    expect(review.status).toBe(200);
+    expect(await review.json()).toMatchObject({ studentName: "Ayla Aliyeva" });
+  });
+  test("payment names support incomplete profiles", async () => {
+    const f = fixture();
+    f.seed();
+    f.state.payment.student.profile = { firstName: " Ayla ", lastName: null };
+    expect(await (await f.request(`/api/payments/${id}`)).json()).toMatchObject({ studentName: "Ayla" });
+    f.state.payment.student.profile.firstName = null;
+    expect(await (await f.request(`/api/payments/${id}`)).json()).toMatchObject({ studentName: null });
+  });
   test("students can only upload for active enrolled courses", async () => {
     const f = fixture();
     f.state.eligible = false;

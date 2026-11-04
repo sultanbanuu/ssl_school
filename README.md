@@ -92,6 +92,10 @@ bun run dev
 ```
 
 Docker is optional: any separate PostgreSQL 17 development database can be used.
+In development, API startup (including watch restarts) applies existing pending
+migrations before accepting requests. Startup and `/ready` also verify that the
+generated auth-user fields exist in the database. Production deployments must
+still run `bun run db:generate` and `bun run db:migrate` explicitly.
 DATABASE_URL is the API connection; DIRECT_URL is the migration connection.
 Keep both credentials server-side. This starter uses a trusted table-owner backend
 connection. RLS deliberately has no public policies, so a non-owner runtime role

@@ -44,6 +44,9 @@ export async function getProfile() {
   return response.json() as Promise<{
     id: string;
     firstName: string | null;
+    lastName: string | null;
+    phone: string | null;
+    profilePhotoUrl: string | null;
     role: "student" | "teacher" | "manager" | "admin";
   }>;
 }

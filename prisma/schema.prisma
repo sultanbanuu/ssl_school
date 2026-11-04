@@ -36,6 +36,7 @@ model User {
   lastName      String?
   birthDate     String?
   learningTime  String?
+  phone         String?
   email         String    @unique
   emailVerified Boolean   @default(false)
   image         String?
@@ -114,6 +115,8 @@ model Profile {
 }
 
 model Student {
+  performanceLevel String? @map("performance_level")
+  evaluations LessonEvaluation[]
   id           String    @id @default(uuid()) @db.Uuid
   profileId    String    @unique @map("profile_id") @db.Uuid
   englishLevel String?   @map("english_level")
@@ -133,6 +136,8 @@ model Student {
 }
 
 model Teacher {
+  performanceWeights Json? @map("performance_weights")
+  evaluations LessonEvaluation[]
   id             String  @id @default(uuid()) @db.Uuid
   profileId      String  @unique @map("profile_id") @db.Uuid
   specialization String
@@ -197,6 +202,7 @@ model Enrollment {
 }
 
 model Lesson {
+  evaluations LessonEvaluation[]
   id           String       @id @default(uuid()) @db.Uuid
   enrollmentId String       @map("enrollment_id") @db.Uuid
   teacherId    String       @map("teacher_id") @db.Uuid
@@ -361,4 +367,21 @@ model TrialRequest {
   @@index([studentId, status])
   @@index([slotId, status])
   @@map("trial_requests")
+}
+
+model LessonEvaluation {
+  id String @id @default(uuid()) @db.Uuid
+  studentId String @map("student_id") @db.Uuid
+  teacherId String @map("teacher_id") @db.Uuid
+  lessonId String @unique @map("lesson_id") @db.Uuid
+  topic String
+  assessment Json
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Restrict)
+  @@index([studentId])
+  @@index([teacherId])
+  @@map("lesson_evaluations")
 }

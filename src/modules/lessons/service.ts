@@ -355,20 +355,30 @@ export function createLessonService(db: PrismaClient) {
         await scheduleLock(tx);
         const lesson = await tx.lesson.findFirst({
           where: { id: params.id, ...scope(actor) },
-          include: { _count: { select: { progress: true } } },
+          include: { _count: { select: { progress: true, evaluations: true, rescheduleRequests: true } } },
         });
         if (!lesson) throw new HttpError(404, "Lesson not found");
         const targets =
           query.scope === "all" && lesson.seriesId
             ? await tx.lesson.findMany({
                 where: { seriesId: lesson.seriesId, ...scope(actor) },
-                include: { _count: { select: { progress: true } } },
+                include: { _count: { select: { progress: true, evaluations: true, rescheduleRequests: true } } },
               })
             : [lesson];
         if (targets.some((row) => row._count.progress))
           throw new HttpError(
             409,
             "A selected lesson has progress records. Nothing was deleted.",
+          );
+        if (targets.some((row) => row._count.evaluations))
+          throw new HttpError(
+            409,
+            "A selected lesson has a saved performance evaluation. Nothing was deleted. Delete individual lessons without evaluations instead.",
+          );
+        if (targets.some((row) => row._count.rescheduleRequests))
+          throw new HttpError(
+            409,
+            "A selected lesson has rescheduling history. Nothing was deleted. Cancel the lesson instead to preserve this history.",
           );
         await tx.lesson.deleteMany({
           where: { id: { in: targets.map((row) => row.id) } },
