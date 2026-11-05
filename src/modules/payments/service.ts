@@ -1,3 +1,5 @@
+import { setAuditActor } from "../../shared/audit";
+import { RECEIPT_CLEANUP_GRACE_MS } from "../../receipt-cleanup";
 import type { z } from "zod";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 import type { ReceiptStorage } from "../../receipt-storage";
@@ -107,6 +109,7 @@ export function createPaymentService(db: PrismaClient, receipts?: ReceiptStorage
       const studentId = requireStudent(actor);
       const store = storage();
       const upload = await db.$transaction(async (tx) => {
+          await setAuditActor(tx, actor);
         const enrollment = await eligible(tx, studentId, body.courseId);
         // Serialize upload-intent creation for this student to enforce a small quota.
         await tx.$queryRaw`SELECT id FROM students WHERE id = ${studentId}::uuid FOR UPDATE`;
@@ -129,17 +132,20 @@ export function createPaymentService(db: PrismaClient, receipts?: ReceiptStorage
           throw new HttpError(409, "This course already has a pending payment");
         }
         const id = crypto.randomUUID();
+        const objectKey = `staging/${studentId}/${id}`;
+        const expiresAt = new Date(Date.now() + 15 * 60000);
         return tx.paymentUpload.create({
           data: {
             id,
             studentId,
             courseId: body.courseId,
-            objectKey: `staging/${studentId}/${id}`,
+            objectKey,
             contentType: body.contentType,
             size: body.size,
             amount: enrollment.course.price,
             courseName: enrollment.course.name,
-            expiresAt: new Date(Date.now() + 15 * 60000),
+            expiresAt,
+            cleanupJobs: { create: { objectKey, kind: "staging", nextAttemptAt: new Date(+expiresAt + RECEIPT_CLEANUP_GRACE_MS) } },
           },
         });
       });
@@ -172,21 +178,28 @@ export function createPaymentService(db: PrismaClient, receipts?: ReceiptStorage
         throw new HttpError(422, "Upload expired; start a new upload");
       await eligible(db, studentId, upload.courseId);
       const store = storage();
-      const receiptKey = await store.finalize(upload.objectKey, upload.contentType, upload.size);
-      let result: PaymentWithStudent;
-      try {
-        result = await db.$transaction(async (tx) => {
-          await tx.$queryRaw`SELECT id FROM payment_uploads WHERE id = ${upload.id}::uuid FOR UPDATE`;
+      const receiptKey = `receipts/${crypto.randomUUID()}`;
+      // Commit cleanup ownership BEFORE writing an R2 object. A crash, timeout,
+      // or ambiguous database commit can never leave an untracked final copy.
+      await db.receiptCleanup.create({ data: { objectKey: receiptKey, uploadId: upload.id, kind: "final", nextAttemptAt: new Date(Date.now() + RECEIPT_CLEANUP_GRACE_MS) } });
+      const result = await db.$transaction(async (tx) => {
+          await setAuditActor(tx, actor);
+          const locked = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM payment_uploads WHERE id = ${upload.id}::uuid FOR UPDATE`;
+          if (!locked.length) throw new HttpError(404, "Upload not found");
           const previous = await tx.payment.findUnique({
             where: { uploadId: upload.id },
             include: studentNameInclude,
           });
-          if (previous)
+          if (previous) {
+            await tx.receiptCleanup.delete({ where: { objectKey: receiptKey } });
             return previous;
-          if (upload.expiresAt <= new Date())
+          }
+          const current = await tx.paymentUpload.findUnique({ where: { id: upload.id } });
+          if (!current || current.expiresAt <= new Date())
             throw new HttpError(422, "Upload expired; start a new upload");
           await eligible(tx, studentId, upload.courseId);
-          return tx.payment.create({
+          await store.finalize(current.objectKey, current.contentType, current.size, receiptKey);
+          const payment = await tx.payment.create({
             include: studentNameInclude,
             data: {
               studentId,
@@ -199,15 +212,11 @@ export function createPaymentService(db: PrismaClient, receipts?: ReceiptStorage
               submittedAt: new Date(),
             },
           });
-        });
-      }
-      catch (error) {
-        await store.remove(receiptKey).catch(() => { });
-        throw error;
-      }
-      if (result.receiptKey !== receiptKey)
-        await store.remove(receiptKey).catch(() => { });
-      // Staging objects expire through the bucket lifecycle, allowing concurrent retries.
+          await tx.receiptCleanup.delete({ where: { objectKey: receiptKey } });
+          return payment;
+        }, { timeout: 30_000, maxWait: 5_000, isolationLevel: "ReadCommitted" });
+      // Never delete a final copy in an error handler: a lost commit response may
+      // still mean the payment was saved. The durable cleaner rechecks references.
       return { created: result.receiptKey === receiptKey, payment: serialize(result) };
     },
     async list(actor: Actor, query: z.output<typeof listQuery>) {
@@ -251,6 +260,7 @@ export function createPaymentService(db: PrismaClient, receipts?: ReceiptStorage
     async review(actor: Actor, params: z.output<typeof idParams>, body: z.output<typeof reviewBody>) {
       requireAdmin(actor);
       const payment = await db.$transaction(async (tx) => {
+          await setAuditActor(tx, actor);
         const current = await tx.payment.findUnique({
           where: { id: params.id },
         });

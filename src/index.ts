@@ -4,22 +4,19 @@ import { createAuth } from "./modules/auth/service";
 import { createApp } from "./app";
 import { createR2Storage } from "./receipt-storage";
 import { startLessonReminders } from "./lesson-reminders";
+import { startPushDelivery } from "./push-delivery";
+import { startReceiptCleanup } from "./receipt-cleanup";
 import { createHealthService } from "./modules/health/service";
-import { fileURLToPath } from "node:url";
+import { assertRuntimeDatabaseAccess } from "./database-access";
 
 const config = loadConfig();
-// Watch restarts must apply newly added migrations before updated auth code runs.
-// Production migrations remain an explicit deployment step.
-if (config.NODE_ENV === "development") {
-  const migration = Bun.spawn([process.execPath, "run", "db:migrate"], {
-    cwd: fileURLToPath(new URL("..", import.meta.url)),
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-  if (await migration.exited !== 0)
-    throw new Error("Database migrations failed. API startup stopped; fix the migration error and restart.");
-}
 const db = createDatabase(config.DATABASE_URL);
+try {
+  await assertRuntimeDatabaseAccess(sql => db.$queryRawUnsafe(sql));
+} catch (error) {
+  await db.$disconnect();
+  throw error;
+}
 if ((await createHealthService(db).readiness()).status !== "ready") {
   await db.$disconnect();
   throw new Error("Database/auth schema is not ready. Run bun run db:generate and bun run db:migrate before starting the API.");
@@ -42,8 +39,12 @@ const app = createApp({
 }).listen({ port: config.PORT, reusePort: false });
 console.log(`SSL School API listening on port ${config.PORT}`);
 const stopReminders = startLessonReminders(db);
+const stopPush = startPushDelivery(db);
+const stopReceiptCleanup = config.RECEIPT_CLEANUP_ENABLED && receipts ? startReceiptCleanup(db, receipts) : undefined;
 async function stop() {
   stopReminders();
+  stopPush();
+  await stopReceiptCleanup?.();
   await app.stop();
   await db.$disconnect();
   process.exit(0);

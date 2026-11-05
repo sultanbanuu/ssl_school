@@ -8,6 +8,24 @@ datasource db {
   provider = "postgresql"
 }
 
+model AuditLog {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorId String? @map("actor_id") @db.Uuid
+  actorRole String? @map("actor_role")
+  databaseUser String @map("database_user")
+  entityType String @map("entity_type")
+  entityId String @map("entity_id") @db.Uuid
+  action String
+  before Json?
+  after Json?
+  transactionId String @map("transaction_id")
+  createdAt DateTime @default(dbgenerated("clock_timestamp()")) @map("created_at") @db.Timestamptz(6)
+  @@index([createdAt, id])
+  @@index([entityType, entityId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("audit_logs")
+}
+
 enum Role {
   admin
   manager
@@ -108,6 +126,7 @@ model Profile {
   manager         Manager?
   admin           Admin?
   notifications   Notification[]
+  pushDevices     PushDevice[]
   reviewedPayments Payment[] @relation("PaymentReviewer")
   reviewedReschedules RescheduleRequest[] @relation("RescheduleReviewer")
   waivedReschedules RescheduleRequest[] @relation("RescheduleWaiver")
@@ -288,8 +307,23 @@ model PaymentUpload {
   student Student @relation(fields: [studentId], references: [id], onDelete: Restrict)
   course Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
   payment Payment?
+  cleanupJobs ReceiptCleanup[]
   @@index([studentId, createdAt])
   @@map("payment_uploads")
+}
+
+model ReceiptCleanup {
+  objectKey String @id @map("object_key")
+  uploadId String @map("upload_id") @db.Uuid
+  kind String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  nextAttemptAt DateTime @map("next_attempt_at") @db.Timestamptz(6)
+  attempts Int @default(0)
+  lastError String? @map("last_error")
+  upload PaymentUpload @relation(fields: [uploadId], references: [id], onDelete: Restrict)
+  @@index([nextAttemptAt, objectKey])
+  @@index([uploadId])
+  @@map("receipt_cleanup")
 }
 
 model Notification {
@@ -301,8 +335,33 @@ model Notification {
   isRead    Boolean  @default(false) @map("is_read")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   profile   Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pushDeliveries PushDelivery[]
   @@index([userId, isRead, createdAt])
   @@map("notifications")
+}
+
+model PushDevice {
+  token String @id
+  userId String @map("user_id") @db.Uuid
+  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries PushDelivery[]
+  @@index([userId])
+  @@map("push_devices")
+}
+
+model PushDelivery {
+  id String @id @default(uuid()) @db.Uuid
+  notificationId String @map("notification_id") @db.Uuid
+  token String
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  device PushDevice @relation(fields: [token], references: [token], onDelete: Cascade)
+  status String @default("pending")
+  attempts Int @default(0)
+  ticketId String? @map("ticket_id")
+  nextAttemptAt DateTime @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  @@unique([notificationId, token])
+  @@index([status, nextAttemptAt])
+  @@map("push_deliveries")
 }
 
 model AvailabilitySlot {

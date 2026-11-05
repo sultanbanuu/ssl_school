@@ -12,6 +12,7 @@ function setup(role: Role | null, duplicate = false) {
   const calls: { name: string; args: any }[] = [];
   const capture = (name: string, result: any) => async (args: any) => { calls.push({ name, args }); return result; };
   const db: any = {
+    $queryRaw: async () => [],
     profile: {
       findUnique: async () => ({ id, role, student: { id: studentId }, teacher: { id: teacherId } }),
       create: async (args: any) => { calls.push({ name: "profile.create", args }); return { id: args.data.id, role: args.data.role, student: { id: studentId }, teacher: { id: teacherId } }; },

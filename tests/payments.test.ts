@@ -17,6 +17,8 @@ function fixture(role: Role | null = "student") {
     payment: null as any,
     upload: null as any,
     updateCount: 1,
+    failFinalize: false,
+    failCreate: false,
     role,
   };
   const record = (name: string, args: any) => calls.push({ name, args });
@@ -49,6 +51,11 @@ function fixture(role: Role | null = "student") {
       },
       findFirst: async ({ where }: any) =>
         state.upload?.studentId === where.studentId ? state.upload : null,
+      findUnique: async () => state.upload,
+    },
+    receiptCleanup: {
+      create: async (args: any) => { record("cleanupQueued", args); return args.data; },
+      delete: async (args: any) => { record("cleanupRemoved", args); return args; },
     },
     payment: {
       findUnique: async () => state.payment,
@@ -69,6 +76,7 @@ function fixture(role: Role | null = "student") {
       },
       create: async ({ data }: any) => {
         record("create", data);
+        if (state.failCreate) throw new Error("Database unavailable");
         state.payment = {
           id,
           student: { profile: { firstName: "Ayla", lastName: "Aliyeva" } },
@@ -96,7 +104,7 @@ function fixture(role: Role | null = "student") {
     uploadUrl: async () => "https://storage.example/upload",
     finalize: async (...args) => {
       record("finalize", args);
-      return "receipts/immutable";
+      if (state.failFinalize) throw new Error("Storage unavailable");
     },
     remove: async (key) => {
       record("remove", key);
@@ -150,6 +158,20 @@ function fixture(role: Role | null = "student") {
 }
 
 describe("monthly payment flow", () => {
+  for (const failure of ["failFinalize", "failCreate"] as const) {
+    test(`${failure} retains durable final cleanup job without immediate deletion`, async () => {
+      const f = fixture();
+      await f.upload();
+      f.state[failure] = true;
+      const response = await f.request("/api/payments", { uploadId: f.state.upload.id });
+      expect(response.status).toBe(500);
+      const names = f.calls.map(call => call.name);
+      expect(names.indexOf("cleanupQueued")).toBeLessThan(names.indexOf("finalize"));
+      expect(names).not.toContain("cleanupRemoved");
+      expect(names).not.toContain("remove");
+      expect(f.state.upload.cleanupJobs.create.kind).toBe("staging");
+    });
+  }
   test("payment list, details and review include the student's full name", async () => {
     const f = fixture("admin");
     f.seed();

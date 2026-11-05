@@ -1,3 +1,4 @@
+import { setAuditActor } from "../../shared/audit";
 import type { z } from "zod";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 import { DAY, addDays, timeString } from "../../scheduling";
@@ -328,6 +329,7 @@ export function createAvailabilityService(db: PrismaClient) {
     ) {
       management(actor);
       const result = await db.$transaction(async (tx) => {
+          await setAuditActor(tx, actor);
         await scheduleLock(tx);
         const range = await validateSlot(tx, actor, body);
         return tx.availabilitySlot.create({
@@ -349,6 +351,7 @@ export function createAvailabilityService(db: PrismaClient) {
     ) {
       const owned = management(actor);
       return db.$transaction(async (tx) => {
+          await setAuditActor(tx, actor);
         await scheduleLock(tx);
         const slot = await tx.availabilitySlot.findFirst({
           where: { id: params.id, ...owned },
@@ -413,6 +416,7 @@ export function createAvailabilityService(db: PrismaClient) {
         throw new HttpError(403, "Teacher or administrator access required");
       const owned = management(actor);
       return db.$transaction(async (tx) => {
+          await setAuditActor(tx, actor);
         await scheduleLock(tx);
         if (params.id.startsWith("auto:")) {
           const [, teacherId, date] = params.id.split(":");
@@ -478,6 +482,7 @@ export function createAvailabilityService(db: PrismaClient) {
     ) {
       const studentId = student(actor);
       const result = await db.$transaction(async (tx) => {
+          await setAuditActor(tx, actor);
         await scheduleLock(tx);
         const person = await tx.student.findUnique({
           where: { id: studentId },
@@ -559,6 +564,7 @@ export function createAvailabilityService(db: PrismaClient) {
           "Only a teacher or administrator can approve requests",
         );
       return db.$transaction(async (tx) => {
+          await setAuditActor(tx, actor);
         await scheduleLock(tx);
         const trial = await tx.trialRequest.findFirst({
           where: { id: params.id, ...owned },

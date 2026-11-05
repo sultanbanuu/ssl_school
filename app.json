@@ -14,6 +14,7 @@
       "package": "school.ssl.mobile"
     },
     "plugins": [
+      "expo-notifications",
       "expo-secure-store",
       [
         "expo-image-picker",
@@ -28,6 +29,11 @@
     ],
     "web": {
       "bundler": "metro"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "acaa6b65-3d4a-43a2-8d0e-087779960ac1"
+      }
     }
   }
 }

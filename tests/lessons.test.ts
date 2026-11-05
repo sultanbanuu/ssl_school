@@ -14,6 +14,7 @@ function fixture(role: Role | null = "admin", options: { conflict?: boolean; sta
   const lesson = { id, enrollmentId, teacherId, enrollment, date: new Date("2026-11-02T00:00:00Z"), startTime: new Date("1970-01-01T10:00:00Z"), endTime: new Date("1970-01-01T11:00:00Z"), status: options.status ?? "scheduled" };
   const tx = {
     trialRequest: { findFirst: async () => null },
+    $queryRaw: async () => [],
     $executeRaw: async () => { calls.push({ name: "lock" }); return 0; },
     enrollment: { findUnique: async () => options.missing ? null : enrollment },
     lesson: {

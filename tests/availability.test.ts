@@ -32,6 +32,7 @@ function fixture() {
     profile: { findUnique: async () => ({ id: who, role, teacher: teacherId ? { id: teacherId } : null, student: { id: who } }) },
     course: { findUnique: async ({ where }: any) => ({ id: where.id, teacherId: where.id === course ? teacher : other, active: true }) },
     student: { findUnique: async ({ where }: any) => ({ id: where.id, status: "active" }) },
+    $queryRaw: async () => [],
     $executeRaw: async () => { lockCount++; return 0; },
     lesson: { findMany: async (args: any) => many(lessons, args) },
     availabilitySlot: {

@@ -1,3 +1,4 @@
+import { setAuditActor } from "../../shared/audit";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 import { HttpError, requireAdmin, type Actor } from "../../shared/authorization";
 import { checkConflict, dates, reminder, scheduleLock, serialize, storedBounds } from "../lessons/service";
@@ -73,10 +74,10 @@ async function calendarCandidate(tx: Prisma.TransactionClient, lesson: Booking, 
 }
 
 export function createReschedulingService(db: PrismaClient) {
-  const transaction = <T>(fn: (tx: Prisma.TransactionClient) => Promise<T>) => db.$transaction(async tx => { await scheduleLock(tx); return fn(tx); }, { timeout: 30000, isolationLevel: "ReadCommitted" });
+  const transaction = <T>(actor: Actor, fn: (tx: Prisma.TransactionClient) => Promise<T>) => db.$transaction(async tx => { await setAuditActor(tx, actor); await scheduleLock(tx); return fn(tx); }, { timeout: 30000, isolationLevel: "ReadCommitted" });
   return {
     async options(actor: Actor, lessonId: string, offset = 0) {
-      return transaction(async tx => {
+      return transaction(actor, async tx => {
         const lesson = await owned(tx, actor, lessonId);
         future(lesson);
         const usage = await quota(tx, lesson.enrollment.studentId);
@@ -88,7 +89,7 @@ export function createReschedulingService(db: PrismaClient) {
       });
     },
     async request(actor: Actor, lessonId: string, slotId: string) {
-      return transaction(async tx => {
+      return transaction(actor, async tx => {
         const lesson = await owned(tx, actor, lessonId);
         future(lesson);
         if ((await quota(tx, lesson.enrollment.studentId)).remaining === 0) throw new HttpError(409, "You have used your 3 rescheduling requests this month. Contact your school if a request was made by mistake.");
@@ -106,7 +107,7 @@ export function createReschedulingService(db: PrismaClient) {
     },
     async review(actor: Actor, id: string, status: "approved" | "rejected", note?: string) {
       if (actor.role !== "admin" && actor.role !== "teacher") throw new HttpError(403, "Teacher or admin access required");
-      return transaction(async tx => {
+      return transaction(actor, async tx => {
         const request = await tx.rescheduleRequest.findFirst({ where: { id, ...requestScope(actor) } });
         if (!request) throw new HttpError(404, "Request not found");
         if (request.status !== "pending") throw new HttpError(409, "This request has already been reviewed");
@@ -127,14 +128,14 @@ export function createReschedulingService(db: PrismaClient) {
     },
     async waive(actor: Actor, id: string, reason: string) {
       requireAdmin(actor);
-      return transaction(async tx => {
+      return transaction(actor, async tx => {
         const request = await tx.rescheduleRequest.findUnique({ where: { id } });
         if (!request) throw new HttpError(404, "Request not found");
         return tx.rescheduleRequest.update({ where: { id }, data: { quotaWaived: true, waivedBy: actor.id, waivedAt: new Date(), waiverReason: reason } });
       });
     },
     async cancel(actor: Actor, id: string) {
-      return transaction(async tx => {
+      return transaction(actor, async tx => {
         const lesson = await owned(tx, actor, id);
         if (lesson.status === "cancelled") return serialize(lesson);
         future(lesson);
@@ -151,7 +152,7 @@ export function createReschedulingService(db: PrismaClient) {
     },
     async restore(actor: Actor, id: string) {
       requireAdmin(actor);
-      return transaction(async tx => {
+      return transaction(actor, async tx => {
         const lesson = await tx.lesson.findUnique({ where: { id }, include });
         if (!lesson || lesson.status !== "cancelled" || !lesson.cancelledByStudent) throw new HttpError(409, "Only a student-cancelled lesson can be restored here");
         if (absolute(lesson)[0]! <= new Date()) throw new HttpError(409, "This lesson time has passed; arrange a new lesson instead");

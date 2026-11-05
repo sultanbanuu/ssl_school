@@ -11,6 +11,7 @@ function setup(role: Role | null, changed = 1) {
     calls.push({ name, args }); return result;
   };
   const tx = {
+    $queryRaw: async () => [],
     profile: {
       findUnique: capture("target", { id: targetId, role: "student" }),
       updateMany: capture("promote", { count: changed }),

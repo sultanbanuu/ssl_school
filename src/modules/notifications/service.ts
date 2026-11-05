@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import type { PrismaClient } from "../../generated/prisma/client";
-import { HttpError, requireStaff, type Actor } from "../../shared/authorization";
+import { HttpError, requireAdmin, type Actor } from "../../shared/authorization";
 import type {
   idParams,
   listQuery,
@@ -10,12 +10,26 @@ import type {
 
 export function createNotificationService(db: PrismaClient) {
   return {
+    async registerDevice(actor: Actor, token: string) {
+      if (actor.role !== "student") throw new HttpError(403, "Student access required");
+      await db.$transaction(async tx => {
+        // Discard queued messages before transferring a shared device to a new account.
+        await tx.pushDevice.deleteMany({ where: { token, userId: { not: actor.id } } });
+        await tx.pushDevice.upsert({ where: { token }, create: { token, userId: actor.id }, update: {} });
+      });
+      return { registered: true };
+    },
+    async removeDevice(actor: Actor, token: string) {
+      await db.pushDevice.deleteMany({ where: { token, userId: actor.id } });
+      return { removed: true };
+    },
     async recipients(
       actor: Actor,
       query: z.output<typeof recipientsQuery>,
     ) {
-      requireStaff(actor);
+      requireAdmin(actor);
       return db.profile.findMany({
+        where: { role: "student" },
         select: { id: true, firstName: true, lastName: true, role: true },
         orderBy: { id: "asc" },
         take: query.limit,
@@ -74,7 +88,7 @@ export function createNotificationService(db: PrismaClient) {
       actor: Actor,
       body: z.output<typeof sendBody>,
     ) {
-      requireStaff(actor);
+      requireAdmin(actor);
       if ("audience" in body) {
         const students = await db.profile.findMany({
           where: { role: "student" },
@@ -82,26 +96,34 @@ export function createNotificationService(db: PrismaClient) {
         });
         if (!students.length)
           throw new HttpError(422, "There are no student accounts to notify");
-        const result = await db.notification.createMany({
-          data: students.map((student) => ({
+        const rows = students.map((student) => ({
+            id: crypto.randomUUID(),
             userId: student.id,
             title: body.title,
             message: body.message,
             type: "announcement",
-          })),
+          }));
+        const result = await db.$transaction(async tx => {
+          const result = await tx.notification.createMany({ data: rows });
+          const devices = await tx.pushDevice.findMany({ where: { userId: { in: students.map(s => s.id) } } });
+          const ids = new Map(rows.map(row => [row.userId, row.id]));
+          if (devices.length) await tx.pushDelivery.createMany({ data: devices.map(device => ({ notificationId: ids.get(device.userId)!, token: device.token })) });
+          return result;
         });
         return { audience: body.audience, delivered: result.count };
       }
-      if (
-        !(await db.profile.findUnique({
+      const recipient = await db.profile.findUnique({
           where: { id: body.userId },
-          select: { id: true },
-        }))
-      ) {
-        throw new HttpError(422, "Recipient account does not exist");
+          select: { id: true, role: true },
+        });
+      if (!recipient || recipient.role !== "student") {
+        throw new HttpError(422, "Recipient must be a student account");
       }
-      const notification = await db.notification.create({
-        data: { ...body, type: "announcement" },
+      const notification = await db.$transaction(async tx => {
+        const notification = await tx.notification.create({ data: { ...body, type: "announcement" } });
+        const devices = await tx.pushDevice.findMany({ where: { userId: body.userId } });
+        if (devices.length) await tx.pushDelivery.createMany({ data: devices.map(device => ({ notificationId: notification.id, token: device.token })) });
+        return notification;
       });
       return notification;
     }

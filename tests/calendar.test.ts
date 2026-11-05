@@ -30,6 +30,7 @@ function fixture(role = "admin", actorTeacherId = teacherId) {
   const enrollment = { id: enrollmentId, teacherId, studentId, course: { name: "English", active: true }, student: { status: "active", profileId: studentId } };
   const tx = {
     trialRequest: { findFirst: async () => null },
+    $queryRaw: async () => [],
     $executeRaw: async () => 0,
     enrollment: { findUnique: async ({ where }: any) => where.id === otherEnrollmentId ? { ...enrollment, id: otherEnrollmentId, studentId: "another-student" } : enrollment },
     teacher: { findUnique: async ({ where }: any) => [teacherId, alternateTeacherId].includes(where.id) ? { id: where.id } : null },

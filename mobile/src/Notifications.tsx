@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   AppState,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -14,6 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { api, Profile } from "./api";
+import { enableDevicePush } from "./devicePush";
 
 type Notification = {
   id: string;
@@ -47,6 +49,8 @@ function Action({
 }
 export function Notifications({ profile, onCount }: { profile: Profile; onCount?: (count: number) => void }) {
   const [composing, setComposing] = useState(false);
+  const [pushStatus, setPushStatus] = useState("");
+  const [enablingPush, setEnablingPush] = useState(false);
   const composeSending = useRef(false);
   const [detail, setDetail] = useState<Notification | null>(null);
   const [items, setItems] = useState<Notification[]>([]);
@@ -167,7 +171,16 @@ export function Notifications({ profile, onCount }: { profile: Profile; onCount?
         }
       >
         <Text accessibilityRole="header" style={s.title}>Notifications</Text>
-        {["admin", "manager"].includes(profile.role) && (
+        {profile.role === "student" && Platform.OS !== "web" && <View>
+          <Action title={enablingPush ? "Enabling notifications…" : "Enable device notifications"} disabled={enablingPush} onPress={async () => {
+            setEnablingPush(true);
+            try { setPushStatus(await enableDevicePush()); }
+            catch (error) { setPushStatus(message(error)); }
+            finally { setEnablingPush(false); }
+          }} />
+          {!!pushStatus && <Text accessibilityRole="alert" style={s.body}>{pushStatus}</Text>}
+        </View>}
+        {profile.role === "admin" && (
           <Action
             title="+  Send a school update"
             onPress={() => setComposing(true)}
@@ -358,7 +371,7 @@ function Compose({ close, sent, sending }: { close: () => void; sent: () => void
           <Text style={s.emptyIcon}>✓</Text>
           <Text style={s.heading}>{title.trim()}</Text>
           <Text style={s.body}>
-            {delivered === null ? "Your update is now in the recipient’s school inbox." : `Your update was sent to ${delivered} students.`}
+            {delivered === null ? "Your update is now in the student’s school inbox." : `Your update was sent to ${delivered} students.`} Device notifications are queued for students who enabled them.
           </Text>
         </View>
         <Action title="Back to notifications" onPress={close} />
@@ -385,10 +398,10 @@ function Compose({ close, sent, sending }: { close: () => void; sent: () => void
         onPress={close}
         disabled={busy}
       />
-      <Text style={s.eyebrow}>STAFF ANNOUNCEMENT</Text>
+      <Text style={s.eyebrow}>ADMIN ANNOUNCEMENT</Text>
       <Text style={s.title}>Send an update.</Text>
       <Text style={s.body}>
-        Keep someone in the loop with a message to their school inbox.
+        Send an update to one student or all students in their school inbox.
       </Text>
       <View style={s.card}>
         <Text style={s.heading}>01 Choose a recipient</Text>
@@ -397,7 +410,7 @@ function Compose({ close, sent, sending }: { close: () => void; sent: () => void
         </Pressable>
         {!loading && !recipients.length && (
           <Text style={s.body}>
-            No accounts loaded. Use the button below to try again.
+            No student accounts loaded. Use the button below to try again.
           </Text>
         )}
         <ScrollView style={{ maxHeight: 220 }} nestedScrollEnabled>
@@ -458,7 +471,7 @@ function Compose({ close, sent, sending }: { close: () => void; sent: () => void
         </Text>
       )}
       <Text style={s.small}>
-        {allStudents ? "This sends an in-app message to every student account." : "This sends an in-app message to one selected account."}
+        {allStudents ? "Send to every student’s inbox and registered devices." : "Send to the selected student’s inbox and registered devices."}
       </Text>
       <Action
         title={busy ? "Sending…" : allStudents ? "Send to all students" : "Send notification"}

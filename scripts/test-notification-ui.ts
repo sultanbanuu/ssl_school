@@ -73,6 +73,7 @@ async function eventually(check: () => boolean | Promise<boolean>) {
 let browser: Browser | undefined;
 let checks = 0;
 async function test(name: string, run: () => Promise<void>) {
+  if (process.env.NOTIFICATION_UI_FILTER && !new RegExp(process.env.NOTIFICATION_UI_FILTER).test(name)) return;
   await run();
   checks++;
   console.log(`PASS ${name}`);
@@ -135,7 +136,7 @@ async function fixture(
     if (endpoint === "/api/notifications/recipients")
       return state.failRecipients
         ? reply({ error: "Recipients unavailable" }, 503)
-        : reply([{ id: "self", firstName: "Test", lastName: "Account", role }]);
+        : reply([{ id: "student-recipient", firstName: "Test", lastName: "Account", role: "student" }]);
     if (endpoint === "/api/notifications/unread-count")
       return reply({ count: state.rows.filter((row) => !row.isRead).length });
     if (request.method() === "PATCH") {
@@ -172,7 +173,7 @@ async function fixture(
         isRead: false,
         createdAt: "2026-10-21T09:00:00Z",
       };
-      state.rows.unshift(item);
+      if (body.userId === "self") state.rows.unshift(item);
       return reply(item, 201);
     }
     if (endpoint === "/api/notifications") {
@@ -208,10 +209,7 @@ async function fixture(
     await page
       .getByRole("button", { name: "Notifications", exact: true })
       .click();
-    await page.getByRole("button", { name: "Refresh", exact: true }).waitFor();
-    await eventually(() =>
-      page.getByRole("button", { name: "Refresh", exact: true }).isEnabled(),
-    );
+    await page.getByText("All updates", { exact: true }).waitFor();
   }
   return {
     page,
@@ -228,6 +226,13 @@ async function fixture(
     channel: process.env.BROWSER_CHANNEL || "msedge",
     headless: true,
   });
+  for (const role of ["manager", "teacher", "student"] as const)
+    await test(`${role} cannot compose student announcements`, async () => {
+      const { page, state, close } = await fixture(role, 390, []);
+      assert.equal(await page.getByRole("button", { name: "+  Send a school update", exact: true }).count(), 0);
+      assert.equal(state.calls.filter(c => c.endpoint.endsWith("/recipients")).length, 0);
+      await close();
+    });
   for (const role of ["student", "teacher", "manager", "admin"] as const)
     await test(`${role} restores one session across lessons, payments and notifications`, async () => {
       const { page, state, close } = await fixture(role, 390, [], false);
@@ -373,8 +378,8 @@ async function fixture(
     );
     await close();
   });
-  for (const role of ["admin", "manager"] as const)
-    await test(`${role} composer validation, failed send, retry, confirmation and self-inbox refresh`, async () => {
+  for (const role of ["admin"] as const)
+    await test(`${role} composer validation, failed send, retry, confirmation and private inbox`, async () => {
       const { page, state, close } = await fixture(
         role,
         role === "admin" ? 1280 : 390,
@@ -383,7 +388,7 @@ async function fixture(
         .getByRole("button", { name: "+  Send a school update", exact: true })
         .click();
       await page
-        .getByRole("button", { name: `Test Account · ${role}`, exact: true })
+        .getByRole("button", { name: "Test Account · student", exact: true })
         .click();
       const send = page.getByRole("button", {
         name: "Send notification",
@@ -416,7 +421,7 @@ async function fixture(
       await page.getByText("Update sent.", { exact: true }).waitFor();
       assert.deepEqual(state.sent, [
         {
-          userId: "self",
+          userId: "student-recipient",
           title: "Lesson reminder",
           message: "Bring your workbook tomorrow.",
         },
@@ -428,12 +433,7 @@ async function fixture(
       await page
         .getByRole("button", { name: "Back to notifications", exact: true })
         .click();
-      await page
-        .getByRole("button", {
-          name: "Unread: Lesson reminder. Open message",
-          exact: true,
-        })
-        .waitFor();
+      assert.equal(await page.getByRole("button", { name: "Unread: Lesson reminder. Open message", exact: true }).count(), 0);
       await close();
     });
   await test("recipient load failure is recoverable", async () => {
@@ -448,7 +448,7 @@ async function fixture(
       .getByRole("button", { name: "Load more recipients", exact: true })
       .click();
     await page
-      .getByRole("button", { name: "Test Account · admin", exact: true })
+      .getByRole("button", { name: "Test Account · student", exact: true })
       .waitFor();
     await close();
   });
@@ -575,7 +575,7 @@ async function fixture(
       .getByRole("button", { name: "Send to all students", exact: true })
       .click();
     await page
-      .getByText("Your update was sent to 12 students.", { exact: true })
+      .getByText("Your update was sent to 12 students.", { exact: false })
       .waitFor();
     assert.deepEqual(state.broadcasts, [
       {

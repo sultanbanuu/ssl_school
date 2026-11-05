@@ -2,6 +2,9 @@ import { z } from "zod";
 import { pagination } from "../../shared/pagination";
 
 export const idParams = z.object({ id: z.uuid() });
+export const deviceBody = z.strictObject({
+  token: z.string().max(256).regex(/^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$/),
+});
 
 export const announcement = {
   title: z.string().trim().min(1).max(160),

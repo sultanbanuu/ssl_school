@@ -106,7 +106,7 @@ export function createPeopleService(db: PrismaClient) {
       body: z.output<typeof createStudentBody>,
     ) {
       requireStaff(actor);
-      const result = await provisionAccount(db, { ...body, role: "student" });
+      const result = await provisionAccount(db, { ...body, role: "student" }, actor);
       return {
         id: result.student!.id,
         profileId: result.id,
@@ -174,7 +174,7 @@ export function createPeopleService(db: PrismaClient) {
       body: z.output<typeof createTeacherBody>,
     ) {
       requireAdmin(actor);
-      const result = await provisionAccount(db, { ...body, role: "teacher" });
+      const result = await provisionAccount(db, { ...body, role: "teacher" }, actor);
       return {
         id: result.teacher!.id,
         profileId: result.id,

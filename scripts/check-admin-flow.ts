@@ -1,4 +1,6 @@
 import "dotenv/config";
+import { fileURLToPath } from "node:url";
+import { assertRuntimeDatabaseAccess } from "../src/database-access";
 import { createDatabase } from "../src/db";
 import { createAuth } from "../src/modules/auth/service";
 import { createApp } from "../src/app";
@@ -36,6 +38,7 @@ async function request(path: string, expected: number, body?: unknown, cookie = 
   return { data: await response.json(), cookie: response.headers.getSetCookie().map(value => value.split(";")[0]).join("; ") };
 }
 try {
+  await assertRuntimeDatabaseAccess(sql => db.$queryRawUnsafe(sql));
   await db.$queryRaw`SELECT 1`;
 } catch {
   await db.$disconnect();
@@ -92,7 +95,7 @@ try {
   await request("/api/me", 200, undefined, studentLogin.cookie);
   const newPassword = crypto.randomUUID() + "Aa1!";
   const reset = Bun.spawn([process.execPath, "run", "account:reset-password"], {
-    cwd: new URL("..", import.meta.url).pathname,
+    cwd: fileURLToPath(new URL("..", import.meta.url)),
     stdin: new Blob([JSON.stringify({ email: email("student"), password: newPassword })]),
     stdout: "pipe",
     stderr: "pipe",
@@ -126,6 +129,8 @@ try {
   await Bun.sleep(11_000);
   const signup = await request("/api/auth/sign-up/email", 200, {
     name: "Public Student", email: email("public"), password,
+    firstName: "Public", lastName: "Student", phone: "+15555550100",
+    birthDate: "2000-01-01", learningTime: "1hr-2hr",
     role: "admin", studentId: student.id,
   });
   profiles.push(signup.data.user.id);
@@ -140,6 +145,12 @@ try {
   await request(target, 422, { role: "admin" }, cookie, "PATCH");
   await request(target, 422, { role: "teacher" }, cookie, "PATCH");
   await request(target, 200, { role: "teacher", specialization: "English" }, cookie, "PATCH");
+  const history = (await request(`/api/audit-logs?entityType=role&entityId=${publicProfile.id}`, 200, undefined, cookie)).data;
+  const promotionEvent = history.items.find((event: any) => event.action === "updated");
+  if (promotionEvent?.actorId !== admin.id || promotionEvent.before.role !== "student" || promotionEvent.after.role !== "teacher")
+    throw new Error("Role audit history does not match the signed-in admin's change");
+  await request("/api/audit-logs", 403, undefined, teacherLogin.cookie);
+  console.log("PASS admin-only role history records the authenticated actor and before/after values");
   await request("/api/me", 401, undefined, signup.cookie);
   const promoted = await db.profile.findUniqueOrThrow({ where: { id: publicProfile.id }, include: { student: true, teacher: true } });
   if (promoted.role !== "teacher" || !promoted.teacher || !promoted.student)
@@ -184,5 +195,5 @@ try {
     await tx.user.deleteMany({ where: { id: { in: profiles } } });
   });
   await db.$disconnect();
-  console.log("Temporary test records removed");
+  console.log("Temporary test records removed; immutable audit history is retained");
 }

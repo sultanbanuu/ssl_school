@@ -3,6 +3,7 @@ import type { PrismaClient } from "../../generated/prisma/client";
 import type { Actor } from "../../shared/authorization";
 import {
   idParams,
+  deviceBody,
   listQuery,
   recipientsQuery,
   sendBody,
@@ -15,6 +16,12 @@ export function notificationRoutes(
 ) {
   const service = createNotificationService(db);
   return new Elysia()
+    .post("/api/notifications/devices", async ({ request, body }) => {
+      return service.registerDevice(await actorFor(request), body.token);
+    }, { body: deviceBody })
+    .delete("/api/notifications/devices", async ({ request, body }) => {
+      return service.removeDevice(await actorFor(request), body.token);
+    }, { body: deviceBody })
     .get(
       "/api/notifications/recipients",
       async ({ request, query, set }) => {

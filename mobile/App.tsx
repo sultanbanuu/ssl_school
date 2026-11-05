@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { authClient, getProfile, SessionExpiredError } from "./auth-client";
 import { SchoolApp } from "./SchoolApp";
+import { removeDevicePush } from "./src/devicePush";
 import {
   birthDateSchema,
   learningTimeOptions,
@@ -135,6 +136,7 @@ export default function App() {
     setBusy(true);
     setError("");
     try {
+      await removeDevicePush();
       const result = await authClient.signOut();
       if (result.error) throw new Error("Couldn't sign out. Please try again.");
       setProfile(null);

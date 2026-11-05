@@ -31,6 +31,7 @@ export const envSchema = z
     R2_ACCESS_KEY_ID: z.string().min(1).optional(),
     R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
     R2_BUCKET: z.string().min(1).optional(),
+    RECEIPT_CLEANUP_ENABLED: z.enum(["true", "false"]).default("false").transform(value => value === "true"),
   })
   .refine((v) => {
     const fields = [
@@ -42,7 +43,8 @@ export const envSchema = z
     return (
       fields.every(Boolean) || fields.every((field) => field === undefined)
     );
-  }, "Set all four R2 variables or leave all unset");
+  }, "Set all four R2 variables or leave all unset")
+  .refine(v => !v.RECEIPT_CLEANUP_ENABLED || Boolean(v.R2_BUCKET), "Receipt cleanup requires R2 configuration");
 export type Config = z.infer<typeof envSchema>;
 export function loadConfig() {
   const result = envSchema.safeParse(process.env);

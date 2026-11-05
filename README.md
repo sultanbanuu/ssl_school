@@ -23,8 +23,12 @@ The app combines signup/sign-in, role-scoped lesson scheduling, monthly payment
 submissions with private R2 receipts and admin review, and in-app notification
 inboxes with staff announcements. See [payments](docs/payments.md),
 [notifications](docs/notifications.md), and [mobile setup](mobile/README.md).
+[Abandoned receipt cleanup](docs/receipt-cleanup.md) provides a non-deleting preview
+and an opt-in worker for expired uploads and failed final copies.
+Admin-only [audit history](docs/audit-history.md) records payment, role, and
+schedule changes with transactionally saved before/after snapshots.
 Progress tracking, invitation email, password reset email, non-receipt uploads,
-audit trails, deployment, and full management dashboards remain on the roadmap.
+deployment, and full management dashboards remain on the roadmap.
 
 ## Backend organization
 
@@ -81,26 +85,24 @@ npm ci
 bun run db:generate
 ```
 
-Copy `.env.example` to `.env`, generate a fresh auth secret using the command in
-that file, and configure a **new** PostgreSQL database. Do not use the draft
+Copy `.env.example` to `.env` and `.env.migrations.example` to `.env.migrations`,
+generate a fresh auth secret, and configure a **new** PostgreSQL database. Do not use the draft
 Supabase connection. With Docker installed, the included database starts with:
 
 ```sh
 docker compose up -d
 bun run db:migrate
-bun run dev
+# Provision school_app and set DATABASE_URL as described below before starting.
 ```
 
 Docker is optional: any separate PostgreSQL 17 development database can be used.
-In development, API startup (including watch restarts) applies existing pending
-migrations before accepting requests. Startup and `/ready` also verify that the
-generated auth-user fields exist in the database. Production deployments must
-still run `bun run db:generate` and `bun run db:migrate` explicitly.
-DATABASE_URL is the API connection; DIRECT_URL is the migration connection.
-Keep both credentials server-side. This starter uses a trusted table-owner backend
-connection. RLS deliberately has no public policies, so a non-owner runtime role
-requires a separately designed grant/policy setup. A migration admin connection
-and an API runtime role should be separated before deployment.
+API startup never runs migrations. Apply them explicitly, then run
+`bun run db:permissions` after provisioning the runtime role once. Startup rejects
+owner/elevated runtime connections; `/ready` checks the auth schema is available.
+DATABASE_URL is the restricted school_app connection in `.env`; DIRECT_URL is
+the migration owner connection in `.env.migrations`, loaded only by tooling.
+Follow [database access setup](docs/database-access.md) for initial provisioning,
+permission checks, and deployment secret separation, then run `bun run dev`.
 
 On a physical phone, configure a reachable API URL and matching trusted origins;
 `localhost` on the phone is the phone itself. HTTPS is required for production.
@@ -191,6 +193,10 @@ Duplicate enrollment returns 409; invalid bodies return 422; unauthenticated
 requests return 401; unauthorized roles return 403.
 
 ## Validation
+
+For API hosting, follow [Railway deployment](docs/deployment.md). The repository
+uses Railway's built-in Railpack builder with the documented build, start, and
+readiness settings; production migrations run separately from the API service.
 
 ```sh
 bun run db:validate

@@ -2,6 +2,8 @@ import { hashPassword } from "better-auth/crypto";
 import type { PrismaClient } from "./generated/prisma/client";
 import { accountInput } from "./shared/account-schemas";
 import { z } from "zod";
+import type { Actor } from "./shared/authorization";
+import { setAuditActor } from "./shared/audit";
 
 const passwordResetInput = z.strictObject({
   email: z.email().transform((value) => value.toLowerCase()),
@@ -30,11 +32,12 @@ export async function resetAccountPassword(db: PrismaClient, input: unknown) {
 }
 
 // Call only from the operator CLI or staff-authorized routes with a fixed role.
-export async function provisionAccount(db: PrismaClient, input: unknown) {
+export async function provisionAccount(db: PrismaClient, input: unknown, actor?: Actor) {
   const data = accountInput.parse(input);
   const password = await hashPassword(data.password);
   const id = crypto.randomUUID();
   return db.$transaction(async (tx) => {
+    if (actor) await setAuditActor(tx, actor);
     await tx.user.create({
       data: {
         id,

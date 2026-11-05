@@ -1,3 +1,4 @@
+import { setAuditActor } from "../../shared/audit";
 import type { z } from "zod";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 import {
@@ -285,6 +286,7 @@ export function createLessonService(db: PrismaClient) {
       } else requireStaff(actor);
       const lesson = await db.$transaction(
         async (tx) => {
+          await setAuditActor(tx, actor);
           await scheduleLock(tx);
           const enrollment = await tx.enrollment.findUnique({
             where: { id: body.enrollmentId },
@@ -352,6 +354,7 @@ export function createLessonService(db: PrismaClient) {
       if (actor.role === "student")
         throw new HttpError(403, "Staff or assigned teacher access required");
       return db.$transaction(async (tx) => {
+          await setAuditActor(tx, actor);
         await scheduleLock(tx);
         const lesson = await tx.lesson.findFirst({
           where: { id: params.id, ...scope(actor) },
@@ -396,6 +399,7 @@ export function createLessonService(db: PrismaClient) {
       return serialize(
         await db.$transaction(
           async (tx) => {
+          await setAuditActor(tx, actor);
             await scheduleLock(tx);
             const lesson = await tx.lesson.findFirst({
               where: { id: params.id, ...scope(actor) },

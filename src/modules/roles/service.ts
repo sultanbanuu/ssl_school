@@ -1,3 +1,4 @@
+import { setAuditActor } from "../../shared/audit";
 import type { z } from "zod";
 import type { PrismaClient } from "../../generated/prisma/client";
 import { HttpError, requireAdmin, type Actor } from "../../shared/authorization";
@@ -15,6 +16,7 @@ export function createRoleService(db: PrismaClient) {
     ) {
       requireAdmin(actor);
       return db.$transaction(async (tx) => {
+          await setAuditActor(tx, actor);
         const profile = await tx.profile.findUnique({
           where: { id: params.id },
         });

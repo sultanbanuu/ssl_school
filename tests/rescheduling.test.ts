@@ -30,6 +30,7 @@ function fixture() {
   let queue = Promise.resolve();
   const db: any = {
     teacher: { findMany: async () => [], findUnique: async () => ({ profile: { firstName: "Sayad" } }) },
+    $queryRaw: async () => [],
     $executeRaw: async () => 0,
     $transaction: async (fn: any) => {
       let release!: () => void;
@@ -168,7 +169,8 @@ test("calendar free time is independent of old manually published course slots",
 });
 test("calendar request works without a published slot and approval rechecks live lessons", async () => {
   const f = fixture(); f.slots.splice(0);
-  const options = await f.s.options(student, "lesson");
+  // Use next week so the first range is not clipped to the current minute.
+  const options = await f.s.options(student, "lesson", 7);
   const range = options.items[0]!;
   const request = await f.s.request(student, "lesson", range.startsAt.toISOString());
   expect(request.slotId).toBeNull(); expect(f.slots).toHaveLength(0);

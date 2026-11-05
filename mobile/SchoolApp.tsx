@@ -33,11 +33,14 @@ import { Performance } from "./Performance";
 import { Lessons } from "./Lessons";
 import { Availability } from "./Availability";
 import { Notifications } from "./src/Notifications";
+import { AuditHistory } from "./src/AuditHistory";
 import { useNotificationUpdates } from "./src/useNotificationUpdates";
 import { StudentApp } from "./StudentApp";
+import { enableDevicePush } from "./src/devicePush";
 import { RescheduleReview } from "./RescheduleReview";
 
 type Route =
+  | { name: "audit" }
   | { name: "performance" }
   | { name: "availability" }
   | { name: "lessons" }
@@ -115,6 +118,13 @@ function Notice({ text }: { text: string }) {
 }
 
 export function SchoolApp(props: React.ComponentProps<typeof StaffSchoolApp>) {
+  useEffect(() => {
+    if (props.profile.role !== "student") return;
+    const register = () => { void enableDevicePush(false).catch(() => {}); };
+    register();
+    const subscription = AppState.addEventListener("change", state => { if (state === "active") register(); });
+    return () => subscription.remove();
+  }, [props.profile.id, props.profile.role]);
   return props.profile.role === "student" ? <StudentApp {...props} /> : <StaffSchoolApp {...props} />;
 }
 
@@ -215,6 +225,7 @@ function StaffSchoolApp({
               <Pressable accessibilityRole="button" onPress={() => setRoute({ name: "performance" })} style={{ minHeight: 44, justifyContent: "center" }}>
                 <Text style={s.link}>Analytics / Performance</Text>
               </Pressable>
+              {profile.role === "admin" && <Pressable accessibilityRole="button" onPress={() => setRoute({ name: "audit" })} style={{ minHeight: 44, justifyContent: "center" }}><Text style={s.link}>Audit history</Text></Pressable>}
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Notifications"
@@ -239,7 +250,7 @@ function StaffSchoolApp({
             </View>
           )}
           <Notice text={error} />
-          {route.name === "performance" ? <Performance profile={profile} onFailure={onFailure} /> : route.name === "availability" ? (
+          {route.name === "audit" ? (profile.role === "admin" ? <AuditHistory /> : <Notice text="Admin access required." />) : route.name === "performance" ? <Performance profile={profile} onFailure={onFailure} /> : route.name === "availability" ? (
             <ScrollView
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={[

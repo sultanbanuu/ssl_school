@@ -27,7 +27,19 @@ afterAll(async () => { await db.close(); });
 
 test("migrations recreate all school and authentication tables", async () => {
   const result = await db.query<{ count: number }>("SELECT count(*)::int AS count FROM pg_tables WHERE schemaname='public'");
-  expect(result.rows[0].count).toBe(20);
+  expect(result.rows[0].count).toBe(24);
+});
+
+test("removing a push device cancels its queued deliveries without deleting the inbox", async () => {
+  const notification = crypto.randomUUID();
+  const token = "ExpoPushToken[migration_test]";
+  await db.query("INSERT INTO notifications (id, user_id, title, message) VALUES ($1, $2, 'Title', 'Message')", [notification, studentProfile]);
+  await db.query("INSERT INTO push_devices (token, user_id) VALUES ($1, $2)", [token, studentProfile]);
+  await db.query("INSERT INTO push_deliveries (id, notification_id, token) VALUES ($1, $2, $3)", [crypto.randomUUID(), notification, token]);
+  await expect(db.query("INSERT INTO push_deliveries (id, notification_id, token) VALUES ($1, $2, $3)", [crypto.randomUUID(), notification, token])).rejects.toThrow(/unique constraint/);
+  await db.query("DELETE FROM push_devices WHERE token=$1", [token]);
+  expect((await db.query("SELECT id FROM push_deliveries WHERE notification_id=$1", [notification])).rows).toHaveLength(0);
+  expect((await db.query("SELECT id FROM notifications WHERE id=$1", [notification])).rows).toHaveLength(1);
 });
 
 test("lesson status accepts rescheduled after migrations", async () => {

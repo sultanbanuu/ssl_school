@@ -85,11 +85,10 @@ validation, not a full image decoder or malware scanner.
 
    Replace/add the production HTTPS frontend origin. API CORS settings do not
    configure R2 CORS. Native mobile clients do not enforce browser CORS.
-4. Add an R2 lifecycle rule deleting objects under **`staging/` after one day**.
-   Do not apply this rule to `receipts/`; six-month UI history is not a deletion policy.
-   Failed submissions attempt to delete unused final objects. For crash recovery,
-   periodically reconcile unreferenced `receipts/` objects after a suitable grace
-   period against database keys; never delete referenced receipts.
+4. Configure [abandoned receipt cleanup](receipt-cleanup.md) and preview the queue.
+   It removes expired staging uploads and tracked failed final copies after a
+   24-hour grace period, while preserving submitted receipts. An optional R2 lifecycle
+   rule may delete `staging/` objects after one day; never apply it to `receipts/`.
 5. Generate the client and deploy migrations to the intended application database:
    `bun run db:generate`, then `bun run db:migrate`. Start the API normally.
 

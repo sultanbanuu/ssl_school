@@ -10,7 +10,7 @@ import { HttpError } from "./shared/authorization";
 export const MAX_RECEIPT_SIZE = 5 * 1024 * 1024;
 export interface ReceiptStorage {
   uploadUrl(key: string, contentType: string): Promise<string>;
-  finalize(key: string, contentType: string, size: number): Promise<string>;
+  finalize(key: string, contentType: string, size: number, finalKey: string): Promise<void>;
   viewUrl(key: string): Promise<string>;
   remove(key: string): Promise<void>;
 }
@@ -40,6 +40,7 @@ export function createR2Storage(config: {
 }): ReceiptStorage {
   const client = new S3Client({
     region: "auto",
+    maxAttempts: 2,
     endpoint: `https://${config.accountId}.r2.cloudflarestorage.com`,
     credentials: {
       accessKeyId: config.accessKeyId,
@@ -66,9 +67,9 @@ export function createR2Storage(config: {
         { expiresIn: 300 },
       ),
     remove: async (Key) => {
-      await client.send(new DeleteObjectCommand({ Bucket, Key }));
+      await client.send(new DeleteObjectCommand({ Bucket, Key }), { abortSignal: AbortSignal.timeout(10_000) });
     },
-    async finalize(Key, contentType, size) {
+    async finalize(Key, contentType, size, finalKey) {
       // Read at most 5 MiB + 1 byte; never trust declared content length alone.
       let object;
       try {
@@ -78,6 +79,7 @@ export function createR2Storage(config: {
             Key,
             Range: `bytes=0-${MAX_RECEIPT_SIZE}`,
           }),
+          { abortSignal: AbortSignal.timeout(10_000) },
         );
       } catch (error) {
         if ((error as { name?: string }).name === "NoSuchKey")
@@ -102,7 +104,6 @@ export function createR2Storage(config: {
       }
       // Signed PUT URLs are reusable. Store a separate, server-only final object so
       // a later staging upload can never change a submitted/approved receipt.
-      const finalKey = `receipts/${crypto.randomUUID()}`;
       await client.send(
         new PutObjectCommand({
           Bucket,
@@ -111,8 +112,8 @@ export function createR2Storage(config: {
           ContentType: contentType,
           CacheControl: "private, no-store",
         }),
+        { abortSignal: AbortSignal.timeout(10_000) },
       );
-      return finalKey;
     },
   };
 }

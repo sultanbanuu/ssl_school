@@ -4,11 +4,12 @@ import type { PrismaClient } from "../src/generated/prisma/client";
 import type { Role } from "../src/generated/prisma/enums";
 const userId = "11111111-1111-4111-8111-111111111111";
 const otherId = "22222222-2222-4222-8222-222222222222";
-function fixture(role: Role | null, found = true) {
+function fixture(role: Role | null, found = true, recipientRole: Role = "student") {
   const calls: { name: string; args: any }[] = [];
   const record = { id: otherId, userId, title: "Update", message: "Hello", isRead: false };
   const db = {
-    profile: { findUnique: async (args: any) => args.select ? (found ? { id: otherId } : null) : { id: userId, role }, findMany: async (args: any) => { calls.push({ name: "recipients", args }); return args.where?.role === 'student' && found ? [{ id: userId }, { id: otherId }] : []; } },
+    profile: { findUnique: async (args: any) => args.select ? (found ? { id: otherId, role: recipientRole } : null) : { id: userId, role }, findMany: async (args: any) => { calls.push({ name: "recipients", args }); return args.where?.role === 'student' && found ? [{ id: userId }, { id: otherId }] : []; } },
+    pushDevice: { findMany: async () => [] },
     notification: {
       findMany: async (args: any) => { calls.push({ name: "list", args }); return [record]; },
       count: async (args: any) => { calls.push({ name: "count", args }); return 3; },
@@ -17,20 +18,21 @@ function fixture(role: Role | null, found = true) {
       createMany: async (args: any) => { calls.push({ name: "broadcast", args }); return { count: args.data.length }; },
     },
   } as unknown as PrismaClient;
+  (db as any).$transaction = async (work: any) => work(db);
   const app = createApp({ db, getSession: async () => role ? { user: { id: userId } } : null, authHandler: async () => new Response(), origins: [] }).compile();
   const call = (path = "", method = "GET", body?: unknown) => app.handle(new Request(`http://localhost/api/notifications${path}`, { method, ...(body === undefined ? {} : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }) }));
   return { call, calls };
 }
 describe("Notifications", () => {
-  for (const role of ['admin', 'manager'] as const) test(`${role} broadcasts only to student profiles`, async () => {
+  for (const role of ['admin'] as const) test(`${role} broadcasts only to student profiles`, async () => {
     const { call, calls } = fixture(role);
     const result = await call('', 'POST', { audience: 'all_students', title: ' Update ', message: ' Hello students ' });
     expect(result.status).toBe(201);
     expect(await result.json()).toEqual({ audience: 'all_students', delivered: 2 });
     expect(calls[0].args).toEqual({ where: { role: 'student' }, select: { id: true } });
-    expect(calls[1].args.data).toEqual([userId, otherId].map(id => ({ userId: id, title: 'Update', message: 'Hello students', type: 'announcement' })));
+    expect(calls[1].args.data.map(({ id, ...row }: any) => row)).toEqual([userId, otherId].map(id => ({ userId: id, title: 'Update', message: 'Hello students', type: 'announcement' })));
   });
-  for (const role of [null, 'student', 'teacher'] as const) test(`${role} cannot broadcast`, async () => {
+  for (const role of [null, 'student', 'teacher', 'manager'] as const) test(`${role} cannot broadcast`, async () => {
     const { call, calls } = fixture(role);
     expect((await call('', 'POST', { audience: 'all_students', title: 'Update', message: 'Hello' })).status).toBe(role ? 403 : 401);
     expect(calls).toHaveLength(0);
@@ -75,18 +77,24 @@ describe("Notifications", () => {
     expect((await call("/read-all", "PATCH")).status).toBe(200);
     expect(calls[0].args).toEqual({ where: { userId, isRead: false }, data: { isRead: true } });
   });
-  for (const role of ["student", "teacher"] as const) test(`${role} cannot send or list recipients`, async () => {
+  for (const role of ["student", "teacher", "manager"] as const) test(`${role} cannot send or list recipients`, async () => {
     const { call, calls } = fixture(role);
     expect((await call("", "POST", { userId: otherId, title: "Hi", message: "Hello" })).status).toBe(403);
     expect((await call("/recipients")).status).toBe(403);
     expect(calls).toHaveLength(0);
   });
-  for (const role of ["admin", "manager"] as const) test(`${role} can send validated announcements`, async () => {
+  for (const role of ["admin"] as const) test(`${role} can send validated announcements`, async () => {
     const { call, calls } = fixture(role);
     expect((await call("", "POST", { userId: otherId, title: " Hi ", message: " Hello " })).status).toBe(201);
     expect(calls[0].args.data).toEqual({ userId: otherId, title: "Hi", message: "Hello", type: "announcement" });
     expect((await call("/recipients")).status).toBe(200);
+    expect(calls[1].args.where).toEqual({ role: "student" });
     expect(calls[1].args.select).toEqual({ id: true, firstName: true, lastName: true, role: true });
+  });
+  for (const role of ["admin", "manager", "teacher"] as const) test(`cannot target a ${role} account`, async () => {
+    const { call, calls } = fixture("admin", true, role);
+    expect((await call("", "POST", { userId: otherId, title: "Hi", message: "Hello" })).status).toBe(422);
+    expect(calls.some(c => c.name === "create")).toBe(false);
   });
   test("missing recipient and invalid inputs fail", async () => {
     const { call } = fixture("admin", false);

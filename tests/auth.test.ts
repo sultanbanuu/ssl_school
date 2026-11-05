@@ -6,6 +6,7 @@ test("public signup rejects short passwords before any database write", async ()
   const db = createDatabase("postgresql://unused:unused@127.0.0.1:1/unused");
   try {
     const auth = createAuth(db, {
+      RECEIPT_CLEANUP_ENABLED: false,
       DATABASE_URL: "postgresql://unused:unused@127.0.0.1:1/unused",
       BETTER_AUTH_SECRET: "test-only-secret-0123456789-abcdefghijklmnopqrstuvwxyz",
       BETTER_AUTH_URL: "http://localhost:3000", TRUSTED_ORIGINS: ["http://localhost:8081"], PORT: 3000, NODE_ENV: "test",
