@@ -8,7 +8,7 @@ DECLARE
 BEGIN
   FOREACH table_name IN ARRAY ARRAY[
     'auth_users', 'auth_sessions', 'auth_accounts', 'auth_verifications',
-    'profiles', 'students', 'teachers', 'manager', 'admin', 'courses',
+    'profiles', 'students', 'teachers', 'manager', 'admin', 'courses', 'course_teachers',
     'enrollments', 'lessons', 'progress_records', 'payments', 'payment_uploads',
     'notifications', 'push_devices', 'push_deliveries', 'availability_slots',
     'reschedule_requests', 'trial_requests', 'lesson_evaluations', 'receipt_cleanup'

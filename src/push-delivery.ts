@@ -1,10 +1,11 @@
 import type { PrismaClient } from "./generated/prisma/client";
+import { sendWebPush } from "./web-push";
 
 type Ticket = { status: "ok" | "error"; id?: string; details?: { error?: string } };
 type PushFetch = (url: string, init: RequestInit) => Promise<Response>;
 
 // Durable outbox: database writes succeed independently of the push provider.
-export async function deliverPushNotifications(db: PrismaClient, fetcher: PushFetch = fetch, now = new Date()) {
+export async function deliverPushNotifications(db: PrismaClient, fetcher: PushFetch = fetch, now = new Date(), webSender = sendWebPush) {
   const rows = await db.pushDelivery.findMany({
     where: { status: { in: ["pending", "receipt"] }, nextAttemptAt: { lte: now } },
     include: { notification: true, device: { include: { profile: { select: { role: true } } } } },
@@ -22,6 +23,18 @@ export async function deliverPushNotifications(db: PrismaClient, fetcher: PushFe
       continue;
     }
     try {
+      if (row.token.startsWith("web:")) {
+        try {
+          await webSender(row.token, JSON.stringify({ title: row.notification.title, body: Array.from(row.notification.message).slice(0, 500).join(""), userId: row.notification.userId, notificationId: row.notificationId }));
+          await update({ status: "delivered" });
+        } catch (error) {
+          const status = (error as { statusCode?: number })?.statusCode;
+          if (status === 404 || status === 410) await db.pushDevice.deleteMany({ where: { token: row.token, userId: row.notification.userId } });
+          else if (status && status >= 400 && status < 500 && status !== 429) await update({ status: "failed" });
+          else throw error;
+        }
+        continue;
+      }
       const response = await fetcher(`https://exp.host/--/api/v2/push/${row.ticketId ? "getReceipts" : "send"}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(process.env.EXPO_ACCESS_TOKEN ? { Authorization: `Bearer ${process.env.EXPO_ACCESS_TOKEN}` } : {}) },

@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from "react";
 import { timeString } from "../src/scheduling";
 import { calendarCSS } from "./calendar-style";
 import { AppointmentPicker } from "./AppointmentPicker";
-import { StudentLessons } from "./StudentLessons";
 import { TimeRangePicker } from "./TimeRangePicker.web";
 import {
   civil,
@@ -128,27 +127,21 @@ export function Availability({
       setDraft(null);
     }
   }
-  if (role === "student" && state.assigned === null)
-    return <p role="status">{state.error || "Loading your schedule..."}</p>;
-  if (role === "student" && state.assigned)
-    return <StudentLessons onFailure={onFailure} />;
   return (
-    <section className="school-calendar" aria-label="Teacher Availability">
+    <section className="school-calendar" aria-label={managing ? "Teacher Availability" : "Free trial with Sayad"}>
       <style>{calendarCSS + availabilityCSS}</style>
       <div className="cal-heading">
         <div>
-          <span className="cal-eyebrow">
-            {managing ? "TRIAL LESSON SCHEDULING" : "YOUR FIRST LESSON"}
-          </span>
-          <h1>Teacher Availability</h1>
+          {!managing && <span className="cal-eyebrow">YOUR FIRST LESSON</span>}
+          <h1>{managing ? "Teacher Availability" : "Free trial with Sayad"}</h1>
         </div>
       </div>
-      <p className="cal-subtitle">
-        {managing
-          ? "Publish trial times, then review student requests. Choose Add availability to create a 15-minute slot."
-          : "Meet your teacher before enrolling. Choose an available time and request a trial lesson."}{" "}
-        All times are Azerbaijan time (GMT+4).
-      </p>
+      {!managing && (
+        <p className="cal-subtitle">
+          Pick a day, choose a time, and send your request. Your free trial lasts
+          15 minutes. All times are Azerbaijan time (GMT+4).
+        </p>
+      )}
       {state.error && !selected && !draft && (
         <p className="cal-message cal-error" role="alert">
           {state.error}
@@ -159,7 +152,7 @@ export function Availability({
           {state.notice}
         </p>
       )}
-      <label className="availability-mobile-filter">
+      {(managing || people.length > 1) && <label className="availability-mobile-filter">
         Teacher
         <select
           aria-label="Filter availability teacher"
@@ -173,7 +166,7 @@ export function Availability({
             </option>
           ))}
         </select>
-      </label>
+      </label>}
       {managing && (
         <button
           type="button"
@@ -198,7 +191,7 @@ export function Availability({
         <p>
           {managing
             ? "Approve or decline pending trials. Confirmed trials reserve the teacher’s time."
-            : "Pending requests need teacher approval. Approved requests are confirmed trial lessons."}
+            : "Sayad will confirm your time here."}
         </p>
         {!state.trials.length && <p>No trial requests yet.</p>}
         <div className="trial-cards">
@@ -338,7 +331,7 @@ export function Availability({
                 >
                   <option value="">Choose course</option>
                   {state.courses
-                    .filter((c) => c.active && c.teacherId === draft.teacherId)
+                    .filter((c) => c.active && (c.teacherId === draft.teacherId || c.teachers?.some((t) => t.teacherId === draft.teacherId)))
                     .map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
@@ -348,7 +341,7 @@ export function Availability({
               </label>
               {draft.teacherId &&
                 !state.courses.some(
-                  (c) => c.active && c.teacherId === draft.teacherId,
+                  (c) => c.active && (c.teacherId === draft.teacherId || c.teachers?.some((t) => t.teacherId === draft.teacherId)),
                 ) && (
                   <p>
                     This teacher needs an active course before publishing
@@ -463,9 +456,10 @@ const availabilityCSS = `
 .availability-mobile-filter{display:grid;gap:6px;max-width:320px;margin:16px 0;font-size:13px}
 .availability-mobile-filter select{padding:12px;border:1px solid #dce4dd;border-radius:10px;background:white}
 .school-calendar>.cal-primary{margin-bottom:14px;min-height:44px}
-.trial-section{margin-top:28px}.trial-section h2{font-size:21px;margin-bottom:4px}.trial-section>p{color:#768078;font-size:12px}
+.trial-section{margin-top:28px}.trial-section h2{font-size:21px;margin-bottom:4px}.trial-section>p{color:#b5b5b5;font-size:12px}
 .trial-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px}
-.trial-card{border:1px solid #dce4dd;background:#fff;padding:16px;border-radius:12px}.trial-card p{font-size:12px;color:#64796b}
-.trial-status{font-size:11px;padding:4px 8px;background:#edf1ee;border-radius:20px;text-transform:capitalize}.trial-status.pending{background:#faf0dd;color:#87672e}.trial-status.approved{background:#e5f0e8;color:#245d48}
+.trial-card{border:1px solid #3d3d3d;background:#272727;color:#f5f5f3;padding:16px;border-radius:12px}.trial-card p{font-size:12px;color:#b5b5b5}
+.trial-card .cal-button:not(.cal-primary){background:#333;border-color:#4b4b4b}.trial-card .cal-button:not(.cal-primary):hover:not(:disabled){background:#3d3d3d}
+.trial-status{font-size:11px;padding:4px 8px;background:#383838;color:#c7c7c7;border-radius:20px;text-transform:capitalize}.trial-status.pending{background:#3b3454;color:#c8c3ff}.trial-status.approved{background:#293f35;color:#a4d8ba}.trial-status.declined{background:#482f32;color:#efb0b5}
 @media(max-width:750px){.school-calendar .cal-actions{flex-wrap:wrap}.school-calendar .cal-button{min-height:44px}}
 `;

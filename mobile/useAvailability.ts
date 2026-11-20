@@ -62,16 +62,15 @@ export function useAvailability(
   const [calendarMonth, setCalendarMonth] = useState(
     () => schoolToday().slice(0, 7) + "-01",
   );
-  const [assigned, setAssigned] = useState<boolean | null>(null);
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
   const [trials, setTrials] = useState<Trial[]>([]);
   const [teachers, setTeachers] = useState<
     { id: string; profile: PersonName }[]
   >([]);
   const [courses, setCourses] = useState<
-    { id: string; name: string; teacherId: string; active: boolean }[]
+    { id: string; name: string; teacherId: string; teachers?: { teacherId: string }[]; active: boolean }[]
   >([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -97,6 +96,13 @@ export function useAvailability(
   const load = useCallback(async () => {
     const ticket = ++version.current;
     setLoading(true);
+    const requests = pages<Trial>("/trial-requests")
+      .then((rows) => {
+        if (ticket === version.current) setTrials(rows);
+      })
+      .catch((e) => {
+        if (ticket === version.current) fail(e);
+      });
     try {
       // Load the visible month's calendar, including its leading/trailing days.
       const from = weekStart(calendarMonth);
@@ -108,23 +114,20 @@ export function useAvailability(
           hasMore: boolean;
         }>(`/availability?from=${from}&to=${to}&limit=100&offset=${offset}`);
         all.push(...page.items);
+        // Show the first available times without waiting for the entire month.
+        if (ticket === version.current) {
+          setSlots([...all]);
+          setLoading(false);
+        }
         if (!page.hasMore) break;
-      }
-      const requests = await pages<Trial>("/trial-requests");
-      if (role === "student") {
-        const enrollments = await pages<{ id: string }>("/enrollments");
-        if (ticket === version.current) setAssigned(enrollments.length > 0);
-      }
-      if (ticket === version.current) {
-        setSlots(all);
-        setTrials(requests);
       }
     } catch (e) {
       if (ticket === version.current) fail(e);
     } finally {
       if (ticket === version.current) setLoading(false);
     }
-  }, [week, calendarMonth, role, fail]);
+    await requests;
+  }, [calendarMonth, fail]);
   useEffect(() => {
     setSlots([]);
     void load();
@@ -141,7 +144,7 @@ export function useAvailability(
     let disposed = false;
     void Promise.all([
       pages<{ id: string; profile: PersonName }>("/teachers"),
-      pages<{ id: string; name: string; teacherId: string; active: boolean }>(
+      pages<{ id: string; name: string; teacherId: string; teachers?: { teacherId: string }[]; active: boolean }>(
         "/courses",
       ),
     ])
@@ -182,7 +185,6 @@ export function useAvailability(
     }
   }
   return {
-    assigned,
     week,
     setWeek,
     setCalendarMonth,

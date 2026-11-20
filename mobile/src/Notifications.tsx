@@ -1,4 +1,6 @@
-import { Ionicons } from "@expo/vector-icons";
+import { BackIcon } from "../CourseIcon";
+import { studentContentWidth } from "../student-layout";
+import { Ionicons } from "../Ionicons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -15,7 +17,7 @@ import {
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { api, Profile } from "./api";
-import { enableDevicePush } from "./devicePush";
+import { BrowserNotificationSettings } from "./BrowserNotificationSettings";
 
 type Notification = {
   id: string;
@@ -43,16 +45,13 @@ function Action({
       onPress={onPress}
       style={[s.action, disabled && { opacity: 0.5 }]}
     >
-      <Text style={s.link}>{title}</Text>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>{title.startsWith("Back to") && <BackIcon />}<Text style={s.link}>{title}</Text></View>
     </Pressable>
   );
 }
 export function Notifications({ profile, onCount }: { profile: Profile; onCount?: (count: number) => void }) {
   const [composing, setComposing] = useState(false);
-  const [pushStatus, setPushStatus] = useState("");
-  const [enablingPush, setEnablingPush] = useState(false);
   const composeSending = useRef(false);
-  const [detail, setDetail] = useState<Notification | null>(null);
   const [items, setItems] = useState<Notification[]>([]);
   const [count, setCount] = useState(0);
   const unread = false;
@@ -147,9 +146,6 @@ export function Notifications({ profile, onCount }: { profile: Profile; onCount?
         "PATCH",
       );
       if (!mounted.current) return;
-      setDetail((old) =>
-        old && (!id || old.id === id) ? { ...old, isRead: true } : old,
-      );
       await latestLoad.current();
     } catch (e) {
       if (mounted.current) setError(message(e));
@@ -171,15 +167,7 @@ export function Notifications({ profile, onCount }: { profile: Profile; onCount?
         }
       >
         <Text accessibilityRole="header" style={s.title}>Notifications</Text>
-        {profile.role === "student" && Platform.OS !== "web" && <View>
-          <Action title={enablingPush ? "Enabling notifications…" : "Enable device notifications"} disabled={enablingPush} onPress={async () => {
-            setEnablingPush(true);
-            try { setPushStatus(await enableDevicePush()); }
-            catch (error) { setPushStatus(message(error)); }
-            finally { setEnablingPush(false); }
-          }} />
-          {!!pushStatus && <Text accessibilityRole="alert" style={s.body}>{pushStatus}</Text>}
-        </View>}
+        {profile.role === "student" && <BrowserNotificationSettings userId={profile.id} promptOnly />}
         {profile.role === "admin" && (
           <Action
             title="+  Send a school update"
@@ -231,11 +219,15 @@ export function Notifications({ profile, onCount }: { profile: Profile; onCount?
           </View>
         ) : (
           items.map((item) => (
-            <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`${item.isRead ? "Read" : "Unread"}: ${item.title}. Open message`} onPress={() => setDetail(item)} style={s.notificationRow}>
+            <View key={item.id} style={s.notificationRow}>
               <View style={s.notificationIcon}><Ionicons name="school-outline" size={24} color="#fff" /></View>
-              <View style={{ flex: 1, minWidth: 0, gap: 8 }}><Text numberOfLines={1} style={s.heading}>{item.title}</Text><Text style={s.small}>{new Date(item.createdAt).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</Text></View>
+              <View style={{ flex: 1, minWidth: 0, gap: 8 }}>
+                <Text selectable style={s.heading}>{item.title}</Text>
+                <Text selectable style={s.messageBody}>{item.message}</Text>
+                <Text style={s.small}>{new Date(item.createdAt).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</Text>
+              </View>
               {!item.isRead && <View style={s.unreadDot} />}
-            </Pressable>
+            </View>
           ))
         )}
         {more && (
@@ -259,45 +251,7 @@ export function Notifications({ profile, onCount }: { profile: Profile; onCount?
           />
         </SafeAreaView></SafeAreaProvider>
       </Modal>
-      <Modal
-        visible={!!detail}
-        animationType="slide"
-        onRequestClose={() => setDetail(null)}
-      >
-        <SafeAreaProvider><SafeAreaView style={s.screen}>
-          <ScrollView contentContainerStyle={s.content}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Back to notifications" onPress={() => setDetail(null)} style={s.backButton}><Ionicons name="chevron-back" size={22} color="#f5f5f3" /><Text style={s.link}>Back to notifications</Text></Pressable>
-            {detail && (
-              <>
-                <Text style={s.eyebrow}>
-                  SCHOOL UPDATE · {detail.isRead ? "READ" : "UNREAD"}
-                </Text>
-                <Text style={s.title}>{detail.title}</Text>
-                <Text style={s.small}>
-                  {new Date(detail.createdAt).toLocaleString()}
-                </Text>
-                <View style={s.card}>
-                  <Text selectable style={s.messageBody}>
-                    {detail.message}
-                  </Text>
-                </View>
-                {!!error && (
-                  <Text accessibilityRole="alert" style={s.error}>
-                    {error}
-                  </Text>
-                )}
-                {!detail.isRead && (
-                  <Action
-                    title={saving ? "Updating…" : "Mark as read"}
-                    disabled={saving}
-                    onPress={() => void read(detail.id)}
-                  />
-                )}
-              </>
-            )}
-          </ScrollView>
-        </SafeAreaView></SafeAreaProvider>
-      </Modal>
+
     </>
   );
 }
@@ -394,7 +348,7 @@ function Compose({ close, sent, sending }: { close: () => void; sent: () => void
       keyboardShouldPersistTaps="handled"
     >
       <Action
-        title="‹  Back to notifications"
+        title="Back to notifications"
         onPress={close}
         disabled={busy}
       />
@@ -443,23 +397,24 @@ function Compose({ close, sent, sending }: { close: () => void; sent: () => void
       </View>
       <View style={s.card}>
         <Text style={s.heading}>02 Write your update</Text>
-        <Text style={s.small}>Title · {title.length}/160</Text>
-        <TextInput
+        <Text style={s.small}>Keep updates easy to read: titles are limited to 80 characters and messages to 500. The full message appears in the inbox.</Text>
+        <Text style={s.small}>Title · {title.length}/80</Text>
+        <TextInput 
           accessibilityLabel="Notification title"
           placeholder="Give your update a title"
           value={title}
           onChangeText={setTitle}
-          maxLength={160}
+          maxLength={80}
           editable={!busy}
           style={s.input}
         />
-        <Text style={s.small}>Message · {body.length}/5000</Text>
-        <TextInput
+        <Text style={s.small}>Message · {body.length}/500</Text>
+        <TextInput 
           accessibilityLabel="Notification message"
           placeholder="Write your update…"
           value={body}
           onChangeText={setBody}
-          maxLength={5000}
+          maxLength={500}
           multiline
           editable={!busy}
           style={[s.input, { minHeight: 100, textAlignVertical: "top" }]}
@@ -483,7 +438,7 @@ function Compose({ close, sent, sending }: { close: () => void; sent: () => void
 }
 const s = StyleSheet.create({
   backButton: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 8, minHeight: 48 },
-  notificationRow: { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "#2d2d2d", borderRadius: 20, padding: 18, minHeight: 92 },
+  notificationRow: { flexDirection: "row", alignItems: "flex-start", gap: 14, backgroundColor: "#2d2d2d", borderRadius: 20, padding: 18, minHeight: 92 },
   notificationIcon: { width: 46, height: 46, borderRadius: 23, backgroundColor: "#7064ed", alignItems: "center", justifyContent: "center" },
   unreadDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: "#ff566a" },
   screen: { flex: 1, backgroundColor: "#272727" },
@@ -518,7 +473,7 @@ const s = StyleSheet.create({
     gap: 18,
     paddingBottom: 48,
     width: "100%",
-    maxWidth: 700,
+    maxWidth: studentContentWidth,
     alignSelf: "center",
   },
   title: { textAlign: "left", fontSize: 28, fontWeight: "700", color: "#f5f5f3" },

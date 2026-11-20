@@ -10,14 +10,18 @@ import { StudentLessonViews, type StudentLesson } from "./StudentLessonViews";
 // Both native and web students read the same scoped records edited by staff.
 export function StudentLessons({
   onFailure,
+  onLessonCountChange,
 }: {
   onFailure: (error: unknown) => void;
+  onLessonCountChange?: (count: number) => void;
 }) {
   const [lessons, setLessons] = useState<StudentLesson[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const onFailureRef = useRef(onFailure);
   onFailureRef.current = onFailure;
+  const onLessonCountChangeRef = useRef(onLessonCountChange);
+  onLessonCountChangeRef.current = onLessonCountChange;
   const refresh = useRef<() => Promise<void>>(async () => {});
   useEffect(() => {
     let disposed = false,
@@ -41,7 +45,9 @@ export function StudentLessons({
           all.push(...page);
           if (page.length < 100) break;
         }
-        setLessons([...new Map(all.map((row) => [row.id, row])).values()]);
+        const uniqueLessons = [...new Map(all.map((row) => [row.id, row])).values()];
+        setLessons(uniqueLessons);
+        onLessonCountChangeRef.current?.(uniqueLessons.filter((lesson) => lesson.status === "scheduled").length);
         setError("");
       } catch (e) {
         if (!disposed) {

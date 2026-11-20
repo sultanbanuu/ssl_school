@@ -1,20 +1,34 @@
 import React, { useEffect, useId, useRef, useState } from "react";
 
-type Student = {
+export type SchedulingStudent = {
   id: string;
   status: string;
-  profile: { firstName: string | null; lastName: string | null };
+  profile: {
+    firstName: string | null;
+    lastName: string | null;
+    user?: { email: string; emailVerified: boolean };
+  };
 };
-const label = (student: Student) =>
+const label = (student: SchedulingStudent) =>
   [student.profile.firstName, student.profile.lastName]
     .filter(Boolean)
     .join(" ") || "Unnamed student";
+
+function StudentEmail({ user }: { user: SchedulingStudent["profile"]["user"] }) {
+  if (!user) return null;
+  return (
+    <small className="student-picker-email">
+      <span>{user.email}</span>
+      <span>{user.emailVerified ? "Verified" : "Unverified"}</span>
+    </small>
+  );
+}
 export function StudentPicker({
   students,
   value,
   onChange,
 }: {
-  students: Student[];
+  students: SchedulingStudent[];
   value: string;
   onChange: (id: string) => void;
 }) {
@@ -38,7 +52,7 @@ export function StudentPicker({
       ?.querySelector('[data-active="true"]')
       ?.scrollIntoView({ block: "nearest" });
   }, [active]);
-  function choose(student: Student) {
+  function choose(student: SchedulingStudent) {
     if (student.status !== "active") return;
     onChange(student.id);
     setOpen(false);
@@ -73,6 +87,7 @@ export function StudentPicker({
         </span>
         <span aria-hidden="true">▾</span>
       </button>
+      {selected && <StudentEmail user={selected.profile.user} />}
       {open && (
         <div
           className="student-picker-menu"
@@ -139,6 +154,7 @@ export function StudentPicker({
               >
                 {label(student)}
                 {student.status !== "active" && <small> · Inactive</small>}
+                <StudentEmail user={student.profile.user} />
               </div>
             ))}
             {!filtered.length && <p role="status">No students found.</p>}

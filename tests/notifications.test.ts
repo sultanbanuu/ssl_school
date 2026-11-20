@@ -24,6 +24,15 @@ function fixture(role: Role | null, found = true, recipientRole: Role = "student
   return { call, calls };
 }
 describe("Notifications", () => {
+  test("browser push config exists, requires sign-in, and never exposes private keys", async () => {
+    expect((await fixture(null).call("/push-config")).status).toBe(401);
+    const response = await fixture("student").call("/push-config");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    const body = await response.json();
+    expect(Object.keys(body)).toEqual(["publicKey"]);
+    expect(body.publicKey === null || typeof body.publicKey === "string").toBe(true);
+  });
   for (const role of ['admin'] as const) test(`${role} broadcasts only to student profiles`, async () => {
     const { call, calls } = fixture(role);
     const result = await call('', 'POST', { audience: 'all_students', title: ' Update ', message: ' Hello students ' });
@@ -104,4 +113,15 @@ describe("Notifications", () => {
     expect((await call("?limit=101")).status).toBe(422);
     expect((await call("/bad/read", "PATCH")).status).toBe(422);
   });
+});
+
+
+test("announcement limits reject oversized text before delivery", async () => {
+  const { call, calls } = fixture("admin");
+  for (const body of [
+    { userId, title: "T".repeat(81), message: "Hello" },
+    { audience: "all_students", title: "Update", message: "M".repeat(501) },
+  ]) expect((await call("", "POST", body)).status).toBe(422);
+  expect(calls).toHaveLength(0);
+  expect((await call("", "POST", { userId, title: "T".repeat(80), message: "M".repeat(500) })).status).toBe(201);
 });

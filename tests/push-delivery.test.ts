@@ -7,6 +7,8 @@ import { deviceBody } from "../src/modules/notifications/schemas";
 
 const student: Actor = { id: "student", role: "student", studentId: null, teacherId: null };
 const token = "ExpoPushToken[test_token]";
+const subscription = { endpoint: "https://fcm.googleapis.com/fcm/send/test", keys: { p256dh: "A".repeat(87), auth: "A".repeat(22) } };
+const webToken = `web:${JSON.stringify(subscription)}`;
 function fixture(overrides: Record<string, unknown> = {}, claimed = true) {
   const writes: any[] = [];
   const removed: any[] = [];
@@ -18,6 +20,39 @@ function fixture(overrides: Record<string, unknown> = {}, claimed = true) {
   return { db, writes, removed };
 }
 describe("Device push delivery", () => {
+  test("sends browser jobs through web push without Expo receipts", async () => {
+    const { db, writes } = fixture({ token: webToken });
+    let sent = false;
+    await deliverPushNotifications(db, async () => { throw new Error("Must not use Expo"); }, new Date(0), async (token, body) => {
+      sent = true;
+      expect(token).toBe(webToken);
+      expect(JSON.parse(body).userId).toBe("student");
+      expect(Array.from(JSON.parse(body).body)).toHaveLength(500);
+    });
+    expect(sent).toBe(true);
+    expect(writes.at(-1).data.status).toBe("delivered");
+  });
+  test("removes expired web subscriptions and retries temporary provider failures", async () => {
+    for (const statusCode of [404, 410, 429, 503]) {
+      const { db, writes, removed } = fixture({ token: webToken });
+      await deliverPushNotifications(db, fetch, new Date(0), async () => { throw { statusCode }; });
+      if (statusCode === 404 || statusCode === 410) expect(removed).toEqual([{ where: { token: webToken, userId: "student" } }]);
+      else expect(writes.at(-1).data).toMatchObject({ status: "pending", nextAttemptAt: new Date(60000) });
+    }
+  });
+  test("validates browser subscriptions and prevents arbitrary server requests", () => {
+    expect(deviceBody.safeParse({ token: webToken }).success).toBe(true);
+    for (const endpoint of ["https://wns2-bl2p.notify.windows.com/w/?token=test", "https://updates.push.services.mozilla.com/wpush/v2/test", "https://web.push.apple.com/test"]) {
+      expect(deviceBody.safeParse({ token: `web:${JSON.stringify({ ...subscription, endpoint })}` }).success).toBe(true);
+    }
+    for (const endpoint of ["https://notify.windows.com.attacker.test/x", "https://evilnotify.windows.com/x", "http://wns2-bl2p.notify.windows.com/x", "https://wns2-bl2p.notify.windows.com:8443/x"]) {
+      expect(deviceBody.safeParse({ token: `web:${JSON.stringify({ ...subscription, endpoint })}` }).success).toBe(false);
+    }
+    for (const endpoint of ["http://fcm.googleapis.com/x", "https://127.0.0.1/x", "https://fcm.googleapis.com.attacker.test/x", "https://user:pass@fcm.googleapis.com/x", "https://fcm.googleapis.com:8080/x"]) {
+      expect(deviceBody.safeParse({ token: `web:${JSON.stringify({ ...subscription, endpoint })}` }).success).toBe(false);
+    }
+    expect(deviceBody.safeParse({ token: 'web:{broken' }).success).toBe(false);
+  });
   test("queues a bounded payload and checks its receipt later", async () => {
     const { db, writes } = fixture();
     let payload: any;

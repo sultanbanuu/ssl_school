@@ -105,11 +105,11 @@ export function Availability({
   return (
     <View style={s.page}>
       <Text accessibilityRole="header" style={s.title}>
-        Teacher Availability
+        {state.managing ? "Teacher Availability" : "Free trial with Sayad"}
       </Text>
       <Text style={s.muted}>
-        15-minute trial lessons before enrollment. All times in Azerbaijan
-        (GMT+4).
+        {!state.managing && "Pick a day, choose a time, and send your request. Your free trial lasts 15 minutes. Sayad will confirm your time. "}
+        All times are Azerbaijan time (GMT+4).
       </Text>
       {people.length > 1 && (
         <View style={s.actions}>
@@ -194,7 +194,7 @@ export function Availability({
                 </View>
                 <View style={s.actions}>
                   {state.courses
-                    .filter((c) => c.active && c.teacherId === draft.teacherId)
+                    .filter((c) => c.active && (c.teacherId === draft.teacherId || c.teachers?.some((t) => t.teacherId === draft.teacherId)))
                     .map((c) => (
                       <View key={c.id}>
                         {button(
@@ -208,7 +208,7 @@ export function Availability({
                 </View>
                 {!!draft.teacherId &&
                   !state.courses.some(
-                    (c) => c.active && c.teacherId === draft.teacherId,
+                    (c) => c.active && (c.teacherId === draft.teacherId || c.teachers?.some((t) => t.teacherId === draft.teacherId)),
                   ) && (
                     <Text style={s.muted}>
                       This teacher needs an active course before publishing
@@ -226,7 +226,7 @@ export function Availability({
                     return (
                       <View key={key} style={s.field}>
                         <Text style={s.muted}>{label}</Text>
-                        <TextInput
+                        <TextInput 
                           accessibilityLabel={label}
                           editable={!state.busy}
                           value={draft[key]}

@@ -8,9 +8,9 @@ const teacherId = "33333333-3333-4333-8333-333333333333";
 const enrollmentId = "44444444-4444-4444-8444-444444444444";
 const id = "55555555-5555-4555-8555-555555555555";
 const body = { enrollmentId, date: "2026-11-02", startTime: "10:00", endTime: "11:00" };
-function fixture(role: Role | null = "admin", options: { conflict?: boolean; status?: string; missing?: boolean; complete?: boolean; active?: boolean } = {}) {
+function fixture(role: Role | null = "admin", options: { conflict?: boolean; status?: string; missing?: boolean; complete?: boolean; active?: boolean; shared?: boolean; unrelated?: boolean } = {}) {
   const calls: { name: string; args?: any }[] = [];
-  const enrollment = { id: enrollmentId, studentId, teacherId, student: { status: options.active === false ? "inactive" : "active" }, course: { active: true } };
+  const enrollment = { id: enrollmentId, studentId, teacherId: options.shared || options.unrelated ? "other-teacher" : teacherId, student: { status: options.active === false ? "inactive" : "active" }, course: { active: true, teacherId: "other-teacher", teachers: options.shared ? [{ teacherId }] : [] } };
   const lesson = { id, enrollmentId, teacherId, enrollment, date: new Date("2026-11-02T00:00:00Z"), startTime: new Date("1970-01-01T10:00:00Z"), endTime: new Date("1970-01-01T11:00:00Z"), status: options.status ?? "scheduled" };
   const tx = {
     trialRequest: { findFirst: async () => null },
@@ -71,6 +71,16 @@ describe("lesson access", () => {
   });
 });
 describe("lesson mutations", () => {
+  test("a shared-course teacher schedules their own lesson on the same enrollment", async () => {
+    const f = fixture("teacher", { shared: true });
+    expect((await f.request("POST", body)).status).toBe(201);
+    expect(f.calls.find(c => c.name === "create")?.args.data).toMatchObject({ enrollmentId, teacherId });
+  });
+  test("an unrelated teacher cannot schedule a shared-course enrollment", async () => {
+    const f = fixture("teacher", { unrelated: true });
+    expect((await f.request("POST", body)).status).toBe(404);
+    expect(f.calls.some(c => c.name === "create")).toBe(false);
+  });
   test("teachers can schedule enrolled students without a payment", async () => {
     const f = fixture("teacher");
     expect((await f.request("POST", body)).status).toBe(201);

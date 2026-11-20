@@ -24,7 +24,7 @@ export function AvailabilityCalendar({
   const halves = [
     600,
     630,
-    ...Array.from({ length: 15 }, (_, i) => 960 + i * 30),
+    ...Array.from({ length: 22 }, (_, i) => 750 + i * 30),
   ];
   return (
     <div

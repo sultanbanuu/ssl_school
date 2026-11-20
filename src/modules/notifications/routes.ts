@@ -9,6 +9,7 @@ import {
   sendBody,
 } from "./schemas";
 import { createNotificationService } from "./service";
+import { webPushConfig } from "../../web-push";
 
 export function notificationRoutes(
   db: PrismaClient,
@@ -16,6 +17,11 @@ export function notificationRoutes(
 ) {
   const service = createNotificationService(db);
   return new Elysia()
+    .get("/api/notifications/push-config", async ({ request, set }) => {
+      await actorFor(request);
+      set.headers["Cache-Control"] = "private, no-store";
+      return { publicKey: webPushConfig()?.publicKey ?? null };
+    })
     .post("/api/notifications/devices", async ({ request, body }) => {
       return service.registerDevice(await actorFor(request), body.token);
     }, { body: deviceBody })

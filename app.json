@@ -5,13 +5,20 @@
     "scheme": "sslschool",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./mobile/assets/brand/app-icon.png",
     "userInterfaceStyle": "light",
     "ios": {
       "bundleIdentifier": "school.ssl.mobile",
+      "icon": "./mobile/assets/brand/ios-icon.png",
       "supportsTablet": true
     },
     "android": {
-      "package": "school.ssl.mobile"
+      "package": "school.ssl.mobile",
+      "versionCode": 2,
+      "adaptiveIcon": {
+        "foregroundImage": "./mobile/assets/brand/android-foreground.png",
+        "backgroundColor": "#ffffff"
+      }
     },
     "plugins": [
       "expo-notifications",

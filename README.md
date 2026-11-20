@@ -201,7 +201,7 @@ readiness settings; production migrations run separately from the API service.
 ```sh
 bun run db:validate
 bun run typecheck
-bun test
+bun run test
 ```
 
 PGlite tests apply all committed migrations to a disposable PostgreSQL engine.
@@ -257,14 +257,15 @@ use Expo SecureStore through the Better Auth Expo client; web sessions use cooki
 Start the API in one terminal with `bun run dev`, then in another:
 
 ```sh
-bun run mobile:web -- --port 8081
+bun run mobile:web
 ```
 
-Open `http://localhost:8081`. Set `EXPO_PUBLIC_API_URL` in `.env` to the API address
-(default `http://localhost:3000`), set `BETTER_AUTH_URL` to that same API address,
-and include `http://localhost:8081` in `TRUSTED_ORIGINS`. Restart both processes
-when changing environment values. Only `EXPO_PUBLIC_API_URL` is intended for the
-client; never prefix database credentials or auth secrets with `EXPO_PUBLIC_`.
+Open `http://localhost:8082`. The preview uses port 3000 on the host serving
+Expo. Set `BETTER_AUTH_URL=http://localhost:3000` for the local API and include
+`http://localhost:8082` in `TRUSTED_ORIGINS`. Keep the production API URL in
+`.env.production.local` or the release build environment. Restart the API and
+Expo after changing environment values. Keep database credentials and auth
+secrets out of `EXPO_PUBLIC_` variables.
 
 For native preview, run `bun run mobile:start`. Use a reachable LAN API address
 on physical devices and include `sslschool://` in trusted origins. Native device
@@ -315,5 +316,5 @@ Teachers and admins open **Lessons → Rescheduling requests** to approve or rej
 
 Student cancellation has no monthly quota and closes pending requests for that lesson. Admins can restore future student-cancelled lessons if the time remains free, or exclude a mistaken rescheduling request from the monthly count with a recorded reason.
 
-Run `bun run db:generate` and `bun run db:migrate` when deploying these changes. Validation: `bun test`, `bun run typecheck`, `bun run mobile:export`, and `bun scripts/test-rescheduling-ui.ts` (isolated browser fixtures).
+Run `bun run db:generate` and `bun run db:migrate` when deploying these changes. Validation uses `bun run test`, `bun run typecheck`, `bun run mobile:export`, and `bun scripts/test-rescheduling-ui.ts` (isolated browser fixtures).
 

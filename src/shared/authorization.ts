@@ -1,3 +1,4 @@
+import { teacherCourseScope } from "./course-teachers";
 import type { Role } from "../generated/prisma/enums";
 
 export class HttpError extends Error {
@@ -26,7 +27,7 @@ export function courseScope(actor: Actor) {
   if (actor.role === "teacher") {
     if (!actor.teacherId)
       throw new HttpError(403, "Teacher account is incomplete");
-    return { teacherId: actor.teacherId };
+    return teacherCourseScope(actor.teacherId);
   }
   return {};
 }
@@ -39,7 +40,8 @@ export function enrollmentScope(actor: Actor) {
   if (actor.role === "teacher") {
     if (!actor.teacherId)
       throw new HttpError(403, "Teacher account is incomplete");
-    return { teacherId: actor.teacherId };
+    return { OR: [{ teacherId: actor.teacherId }, { course: teacherCourseScope(actor.teacherId) },
+      { lessons: { some: { teacherId: actor.teacherId, status: { in: ["scheduled", "completed"] as ("scheduled" | "completed")[] } } } }] };
   }
   return {};
 }

@@ -1,3 +1,4 @@
+import { BackIcon } from "../CourseIcon";
 import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -63,7 +64,7 @@ export function AuditHistory() {
     </ScrollView>
     <Modal visible={!!detail} animationType="slide" onRequestClose={() => setDetail(null)}>
       <SafeAreaView style={s.screen}><ScrollView contentContainerStyle={s.content}>
-        <Pressable accessibilityRole="button" onPress={() => setDetail(null)} style={s.button}><Text style={s.text}>Back to audit history</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => setDetail(null)} style={s.button}><View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}><BackIcon /><Text style={s.text}>Back to audit history</Text></View></Pressable>
         {detail && <>
           <Text accessibilityRole="header" style={s.title}>{label(detail.entityType)} {detail.action}</Text>
           <Text style={s.muted}>{new Date(detail.createdAt).toLocaleString()}</Text>
@@ -94,3 +95,4 @@ const s = StyleSheet.create({
   card: { padding: 18, gap: 8, borderRadius: 18, backgroundColor: "#303030" },
   error: { color: "#ff9b90" },
 });
+

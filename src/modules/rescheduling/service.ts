@@ -4,13 +4,14 @@ import { HttpError, requireAdmin, type Actor } from "../../shared/authorization"
 import { checkConflict, dates, reminder, scheduleLock, serialize, storedBounds } from "../lessons/service";
 import { calendarOpenings } from "./calendar";
 import { workingRanges } from "../../teacher-hours";
+import { lessonSchedule, studentName } from "../../shared/lesson-notification";
 
 const OFFSET = 4 * 3600000;
 export function bakuMonth(now: Date) {
   const civil = new Date(now.getTime() + OFFSET);
   return { start: new Date(Date.UTC(civil.getUTCFullYear(), civil.getUTCMonth(), 1) - OFFSET), end: new Date(Date.UTC(civil.getUTCFullYear(), civil.getUTCMonth() + 1, 1) - OFFSET) };
 }
-const include = { enrollment: { include: { student: true, course: true } }, teacher: true } as const;
+const include = { enrollment: { include: { student: { include: { profile: true } }, course: true } }, teacher: true } as const;
 type Booking = Prisma.LessonGetPayload<{ include: typeof include }>;
 const absolute = (lesson: Booking) => storedBounds(lesson).map(time => new Date(time - OFFSET));
 const slotSchedule = (start: Date, end: Date) => {
@@ -41,8 +42,8 @@ async function quota(tx: Prisma.TransactionClient, id: string) {
   const used = await tx.rescheduleRequest.count({ where: { studentId: id, quotaWaived: false, createdAt: { gte: month.start, lt: month.end } } });
   return { used, limit: 3, remaining: Math.max(0, 3 - used), resetsAt: month.end };
 }
-async function notify(tx: Prisma.TransactionClient, users: string[], title: string, message: string) {
-  await tx.notification.createMany({ data: [...new Set(users)].map(userId => ({ userId, title, message, type: "lesson_reschedule" })) });
+async function notify(tx: Prisma.TransactionClient, users: string[], title: string, message: string, lesson: Booking) {
+  await tx.notification.createMany({ data: [...new Set(users)].map(userId => ({ userId, title: userId === lesson.teacher.profileId ? `${title}: ${studentName(lesson.enrollment.student.profile)}` : title, message, type: "lesson_reschedule" })) });
 }
 async function candidate(tx: Prisma.TransactionClient, lesson: Booking, slotId: string) {
   const slot = await tx.availabilitySlot.findFirst({ where: { id: slotId, teacherId: lesson.teacherId, courseId: lesson.enrollment.courseId, active: true, startsAt: { gt: new Date() } } });
@@ -98,7 +99,7 @@ export function createReschedulingService(db: PrismaClient) {
         const proposed = fromCalendar ? await calendarCandidate(tx, lesson, slotId) : await candidate(tx, lesson, slotId);
         const result = await tx.rescheduleRequest.create({ data: { lessonId, slotId: fromCalendar ? null : slotId, studentId: lesson.enrollment.studentId, teacherId: lesson.teacherId, originalStart: proposed.originalStart, originalEnd: proposed.originalEnd, startsAt: proposed.slot.startsAt, endsAt: proposed.endsAt } });
         const admins = await tx.profile.findMany({ where: { role: "admin" }, select: { id: true } });
-        await notify(tx, [lesson.teacher.profileId, ...admins.map(p => p.id)], "Rescheduling request", `${lesson.enrollment.course.name}: requested ${proposed.schedule.date} ${proposed.schedule.startTime} (Baku). Review in Lessons → Rescheduling requests.`);
+        await notify(tx, [lesson.teacher.profileId, ...admins.map(p => p.id)], "Rescheduling request", `${studentName(lesson.enrollment.student.profile)} · ${lesson.enrollment.course.name}. Original: ${lessonSchedule(serialize(lesson))}. Requested: ${lessonSchedule(proposed.schedule)}. Review in Lessons → Rescheduling requests.`, lesson);
         return result;
       });
     },
@@ -122,7 +123,7 @@ export function createReschedulingService(db: PrismaClient) {
           await tx.lesson.update({ where: { id: lesson.id }, data: { ...dates(proposed.schedule), ...reminder(proposed.schedule, lesson.reminderMinutes), rescheduledAt: new Date(), seriesId: null, repeatRule: PrismaJsonNull(), cancelledByStudent: false } });
         }
         const result = await tx.rescheduleRequest.update({ where: { id }, data: { status, reviewedBy: actor.id, reviewedAt: new Date(), reviewNote: note } });
-        await notify(tx, [lesson.enrollment.student.profileId, lesson.teacher.profileId], `Rescheduling ${status}`, `${lesson.enrollment.course.name}: ${status === "approved" ? `your lesson is now ${slotSchedule(request.startsAt, request.endsAt).date} ${slotSchedule(request.startsAt, request.endsAt).startTime} (Baku).` : "your original lesson time is unchanged."}${note ? ` ${note}` : ""}`);
+        await notify(tx, [lesson.enrollment.student.profileId, lesson.teacher.profileId], `Rescheduling ${status}`, `${studentName(lesson.enrollment.student.profile)} · ${lesson.enrollment.course.name}. ${status === "approved" ? `Previous: ${lessonSchedule(slotSchedule(request.originalStart, request.originalEnd))}. Confirmed: ${lessonSchedule(slotSchedule(request.startsAt, request.endsAt))}.` : `Request rejected. Unchanged lesson: ${lessonSchedule(serialize(lesson))}. Requested: ${lessonSchedule(slotSchedule(request.startsAt, request.endsAt))}.`}${note ? ` Review note: ${note}` : ""}`, lesson);
         return result;
       });
     },
@@ -142,7 +143,7 @@ export function createReschedulingService(db: PrismaClient) {
         await tx.rescheduleRequest.updateMany({ where: { lessonId: id, status: "pending" }, data: { status: "cancelled", reviewedAt: new Date(), reviewedBy: actor.id, reviewNote: "Student cancelled the lesson" } });
         const result = await tx.lesson.update({ where: { id }, data: { status: "cancelled", cancelledByStudent: true, reminderAt: null } });
         const admins = await tx.profile.findMany({ where: { role: "admin" }, select: { id: true } });
-        await notify(tx, [lesson.teacher.profileId, ...admins.map(p => p.id)], "Lesson cancelled by student", `${lesson.enrollment.course.name}: ${serialize(lesson).date} ${serialize(lesson).startTime} (Baku). Admins can restore a mistaken cancellation in Lessons.`);
+        await notify(tx, [lesson.teacher.profileId, ...admins.map(p => p.id)], "Lesson cancelled by student", `${studentName(lesson.enrollment.student.profile)} · ${lesson.enrollment.course.name} · ${lessonSchedule(serialize(lesson))}. Admins can restore a mistaken cancellation in Lessons.`, lesson);
         return serialize(result);
       });
     },
@@ -161,7 +162,7 @@ export function createReschedulingService(db: PrismaClient) {
         const input = { ...schedule, endTime: schedule.endTime };
         await checkConflict(tx, { studentId: lesson.enrollment.studentId, teacherId: lesson.teacherId }, dates(input), [id]);
         const result = await tx.lesson.update({ where: { id }, data: { status: "scheduled", cancelledByStudent: false, ...reminder(input, lesson.reminderMinutes) } });
-        await notify(tx, [lesson.enrollment.student.profileId, lesson.teacher.profileId], "Lesson restored", `${lesson.enrollment.course.name}: ${schedule.date} ${schedule.startTime} (Baku). Your admin restored the cancelled lesson.`);
+        await notify(tx, [lesson.enrollment.student.profileId, lesson.teacher.profileId], "Lesson restored", `${studentName(lesson.enrollment.student.profile)} · ${lesson.enrollment.course.name} · ${lessonSchedule(schedule)}. Your admin restored the cancelled lesson.`, lesson);
         return serialize(result);
       });
     },

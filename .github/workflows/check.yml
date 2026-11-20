@@ -16,7 +16,7 @@ jobs:
       - run: bun run db:generate
       - run: bun run db:validate
       - run: bun run typecheck
-      - run: bun test
+      - run: bun run test
       - run: bun run mobile:export
         env:
           EXPO_NO_DOTENV: '1'

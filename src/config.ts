@@ -11,6 +11,8 @@ export const envSchema = z
       .min(32)
       .refine((v) => !v.startsWith("replace-"), "Generate a real auth secret"),
     BETTER_AUTH_URL: z.string().url(),
+    RESEND_API_KEY: z.string().trim().min(1).optional(),
+    EMAIL_FROM: z.string().trim().email().optional(),
     TRUSTED_ORIGINS: z
       .string()
       .min(1)
@@ -44,7 +46,11 @@ export const envSchema = z
       fields.every(Boolean) || fields.every((field) => field === undefined)
     );
   }, "Set all four R2 variables or leave all unset")
-  .refine(v => !v.RECEIPT_CLEANUP_ENABLED || Boolean(v.R2_BUCKET), "Receipt cleanup requires R2 configuration");
+  .refine(v => !v.RECEIPT_CLEANUP_ENABLED || Boolean(v.R2_BUCKET), "Receipt cleanup requires R2 configuration")
+  .refine(v => v.NODE_ENV !== "production" || !v.EMAIL_FROM?.toLowerCase().endsWith("@resend.dev"), {
+    path: ["EMAIL_FROM"],
+    message: "Use an address on your verified Resend domain; resend.dev only supports test recipients",
+  });
 export type Config = z.infer<typeof envSchema>;
 export function loadConfig() {
   const result = envSchema.safeParse(process.env);
@@ -57,6 +63,9 @@ export function loadConfig() {
     !result.data.BETTER_AUTH_URL.startsWith("https://")
   ) {
     throw new Error("Production authentication requires HTTPS");
+  }
+  if (result.data.NODE_ENV === "production" && (!result.data.RESEND_API_KEY || !result.data.EMAIL_FROM)) {
+    throw new Error("Email verification requires RESEND_API_KEY and EMAIL_FROM in production");
   }
   return result.data;
 }

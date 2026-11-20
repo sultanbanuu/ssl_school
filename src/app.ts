@@ -19,6 +19,7 @@ import { notificationRoutes } from "./modules/notifications/routes";
 import { auditRoutes } from "./modules/audit/routes";
 import { performanceRoutes } from "./modules/performance/routes";
 import type { ReceiptStorage } from "./receipt-storage";
+import { webSubscription } from "./web-push";
 
 type Dependencies = {
   db: PrismaClient;
@@ -44,7 +45,7 @@ export function createApp({
         credentials: true,
       }),
     )
-    .onError(({ code, error, set }) => {
+    .onError(({ code, error, set, body, request }) => {
       if (error instanceof HttpError) {
         set.status = error.status;
         return { error: error.message };
@@ -65,6 +66,23 @@ export function createApp({
       }
       if (code === "VALIDATION" || code === "PARSE") {
         set.status = 422;
+        if (new URL(request.url).pathname === "/api/notifications/devices") {
+          const token = (body as { token?: unknown } | undefined)?.token;
+          if (typeof token === "string" && token.startsWith("web:")) {
+            try {
+              const subscription = JSON.parse(token.slice(4));
+              const parsed = webSubscription.safeParse(subscription);
+              const host = typeof subscription.endpoint === "string" ? new URL(subscription.endpoint).hostname : "missing";
+              console.warn("Browser push validation rejected", {
+                method: request.method, host, tokenLength: token.length,
+                endpointLength: subscription.endpoint?.length,
+                keyLengths: { p256dh: subscription.keys?.p256dh?.length, auth: subscription.keys?.auth?.length },
+                fields: parsed.success ? [] : parsed.error.issues.map(issue => issue.path.join(".")),
+              });
+              return { error: `Browser notification registration was rejected (${host}; ${parsed.success ? "request format" : parsed.error.issues.map(issue => issue.path.join(".")).join(", ")}).` };
+            } catch { return { error: "The saved browser notification subscription is invalid. Please reset notifications in your browser’s site settings." }; }
+          }
+        }
         return { error: "Invalid request" };
       }
       if (code === "NOT_FOUND") {

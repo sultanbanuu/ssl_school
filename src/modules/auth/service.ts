@@ -7,6 +7,7 @@ import type { PrismaClient } from "../../generated/prisma/client";
 import { HttpError, type Actor } from "../../shared/authorization";
 import { birthDateSchema, learningTimeSchema, signupName } from "./schemas";
 import type { ActorFor, GetSession } from "./types";
+import { sendVerificationEmail, sendPasswordResetEmail } from "./email";
 
 export function createAuth(db: PrismaClient, config: Config) {
   // A nested write makes the school profile part of the auth user's creation.
@@ -36,11 +37,27 @@ export function createAuth(db: PrismaClient, config: Config) {
     trustedOrigins: config.TRUSTED_ORIGINS,
     emailAndPassword: {
       enabled: true,
+      requireEmailVerification: true,
+      autoSignIn: false,
       minPasswordLength: 12,
       maxPasswordLength: 128,
+      resetPasswordTokenExpiresIn: 3600,
+      revokeSessionsOnPasswordReset: true,
+      sendResetPassword: async ({ user, url }) => sendPasswordResetEmail(config, user.email, url),
+    },
+    emailVerification: {
+      sendOnSignUp: true,
+      sendOnSignIn: true,
+      autoSignInAfterVerification: false,
+      expiresIn: 3600,
+      sendVerificationEmail: async ({ user, url }) => sendVerificationEmail(config, user.email, url),
     },
     advanced: { database: { generateId: "uuid" } },
-    rateLimit: { enabled: true },
+    rateLimit: { enabled: true, customRules: {
+      "/send-verification-email": { window: 60, max: 3 },
+      "/request-password-reset": { window: 60, max: 3 },
+      "/reset-password": { window: 60, max: 5 },
+    } },
     user: {
       additionalFields: {
         phone: { type: "string", required: true, validator: { input: phoneSchema }, returned: false },

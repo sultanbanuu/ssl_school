@@ -1,5 +1,14 @@
 # Railway API deployment — Developer 1
 
+## Web release counter check
+
+Before publishing any Expo web export, run `bun run web:verify-counter <export-directory>`
+from the main workspace. Do not deploy if this check fails. Older release folders
+contained a payment-expiry day counter instead of the remaining scheduled lesson
+count and overwrote the fix in later deployments. Rebuild from current source;
+do not upload the old `web-release` artifacts in temporary release copies.
+
+
 Deploy the Bun API directly from GitHub using Railway's built-in Railpack builder.
 No Docker installation or custom Dockerfile is required. Deployment still requires
 your Railway project, PostgreSQL service, domain, and secrets.
@@ -31,6 +40,33 @@ the separate release environment before deploying the API. Take a backup before
 schema changes and rehearse restoration before the student pilot.
 
 ## Configure the API service
+
+Email/password sign-in now requires a verified email address. Set `RESEND_API_KEY`
+and `EMAIL_FROM` (a plain email address on a verified Resend domain) on the API
+before deploying. Production startup refuses missing mail configuration. Local
+development also needs these settings to deliver verification emails; tokens are
+never printed to logs. Allow outbound HTTPS to `api.resend.com`.
+
+For SSL School, use `EMAIL_FROM=no-reply@sslschool.az` with the verified
+`sslschool.az` domain. Do not use `onboarding@resend.dev` in production: Resend
+rejects delivery to anyone except the account's test recipient. Production
+configuration now rejects this test sender. Delivery failures log the provider
+HTTP status and a configuration hint without logging tokens or recipients.
+
+Signup opens a dedicated **Check your email** screen with the recipient address,
+one-hour expiry instructions, a resend action with a 60-second cooldown, and a
+return-to-sign-in action. Signup sends a verification link without creating a session. Unverified
+users receive a fresh link when they sign in, and can use **Resend verification
+email** on the verification screen. The sign-in screen instead offers **Forgot Password?**.
+Password resets use the existing Resend sender, single-use links with a one-hour expiry,
+and revoke the account's sessions when the password changes. The callback uses
+`?flow=reset-password` on the web origin or native scheme. No email-status lookup
+is added to sign-in page loading or typing. Existing unverified accounts, including accounts
+created by administrators, must verify on their next password sign-in. Existing
+sessions are not revoked by this release. Include the web app origin and
+`sslschool://` in `TRUSTED_ORIGINS` for verification redirects. No database migration
+is needed. Before release, test delivery to a real mailbox, follow the link, and
+sign in from both the web and native app.
 
 Connect the repository to a Railway service with the repository root as its build
 directory. Configure these values in Railway service settings:

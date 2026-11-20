@@ -27,7 +27,13 @@ afterAll(async () => { await db.close(); });
 
 test("migrations recreate all school and authentication tables", async () => {
   const result = await db.query<{ count: number }>("SELECT count(*)::int AS count FROM pg_tables WHERE schemaname='public'");
-  expect(result.rows[0].count).toBe(24);
+  expect(result.rows[0].count).toBe(25);
+});
+
+test("course assignments enforce unique teachers and positive weekly sessions", async () => {
+  await db.query("INSERT INTO course_teachers(course_id, teacher_id, weekly_sessions) VALUES ($1, $2, 2)", [courseId, teacherId]);
+  await expect(db.query("INSERT INTO course_teachers(course_id, teacher_id) VALUES ($1, $2)", [courseId, teacherId])).rejects.toThrow(/unique constraint/);
+  await expect(db.query("UPDATE course_teachers SET weekly_sessions=0 WHERE course_id=$1", [courseId])).rejects.toThrow(/check constraint/);
 });
 
 test("removing a push device cancels its queued deliveries without deleting the inbox", async () => {

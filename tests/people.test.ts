@@ -82,7 +82,7 @@ test("role injection, weak passwords, and missing specializations are rejected",
 test("teachers list only assigned students without exposing contact or auth fields", async () => {
   const { send, calls } = setup("teacher");
   expect((await send("/api/students" )).status).toBe(200);
-  expect(calls[0].args.where).toEqual({ enrollments: { some: { teacherId } } });
+  expect(calls[0].args.where).toEqual({ enrollments: { some: { OR: [{ teacherId }, { course: { OR: [{ teacherId }, { teachers: { some: { teacherId } } }] } }, { lessons: { some: { teacherId, status: { in: ["scheduled", "completed"] } } } }] } } });
   expect(calls[0].args.include.profile.select.user).toBe(false);
   expect(calls[0].args.include.profile.select.phone).toBe(false);
 });
@@ -120,11 +120,26 @@ test("students and teachers cannot edit managed records", async () => {
   }
 });
 
-test("scheduling directory lists all student names only for staff and teachers", async () => {
+test("scheduling directory includes email and verification only for admins", async () => {
   for (const role of ["admin", "manager", "teacher"] as const) {
     const f = setup(role);
     expect((await f.send("/api/scheduling-students?limit=100&offset=100")).status).toBe(200);
-    expect(f.calls[0].args).toEqual({ take: 100, skip: 100, orderBy: { id: "asc" }, select: { id: true, status: true, profile: { select: { firstName: true, lastName: true } } } });
+    expect(f.calls[0].args).toEqual({
+      take: 100,
+      skip: 100,
+      orderBy: { id: "asc" },
+      select: {
+        id: true,
+        status: true,
+        profile: {
+          select: {
+            firstName: true,
+            lastName: true,
+            user: role === "admin" ? { select: { email: true, emailVerified: true } } : false,
+          },
+        },
+      },
+    });
   }
   expect((await setup("student").send("/api/scheduling-students")).status).toBe(403);
   expect((await setup(null).send("/api/scheduling-students")).status).toBe(401);

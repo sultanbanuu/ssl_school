@@ -1,3 +1,4 @@
+import { hasCourseTeacher } from "../../shared/course-teachers";
 import type { z } from "zod";
 import type { PrismaClient } from "../../generated/prisma/client";
 import { HttpError, enrollmentScope, requireStaff, type Actor } from "../../shared/authorization";
@@ -39,8 +40,9 @@ export function createEnrollmentService(db: PrismaClient) {
       const result = await db.$transaction(async (tx) => {
         const course = await tx.course.findUnique({
           where: { id: body.courseId },
+          include: { teachers: true },
         });
-        if (actor.role === "teacher" && course?.teacherId !== actor.teacherId)
+        if (actor.role === "teacher" && !hasCourseTeacher(course, actor.teacherId!))
           throw new HttpError(404, "Course not found");
         if (!course?.active)
           throw new HttpError(422, "Select an active course");

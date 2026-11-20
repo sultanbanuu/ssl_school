@@ -27,12 +27,12 @@ type FixtureState = {
   sent: Announcement[];
   broadcasts: { audience: string; title: string; message: string }[];
 };
-const root = path.resolve(
+const root = process.env.NOTIFICATION_UI_ROOT ? path.resolve(process.env.NOTIFICATION_UI_ROOT) : path.resolve(
   fileURLToPath(
     new URL("../mobile/dist-notification-review/", import.meta.url),
   ),
 );
-const output = path.join(root, "qa");
+const output = path.resolve("mobile/dist-notification-review/qa");
 fs.mkdirSync(output, { recursive: true });
 const server = http.createServer((req, res) => {
   const file = path.resolve(
@@ -131,8 +131,9 @@ async function fixture(
     if (endpoint === "/api/auth/sign-out") { state.signedIn = false; return reply({ success: true }); }
     if (endpoint === "/api/me")
       return reply({ id: "self", firstName: "Test", role });
-    if (endpoint === "/api/lessons" || endpoint === "/api/enrollments") return reply([]);
+    if (endpoint === "/api/lessons" || endpoint === "/api/enrollments" || endpoint === "/api/courses") return reply([]);
     if (endpoint === "/api/payments") return reply([]);
+    if (endpoint === "/api/performance") return reply({ enrollments: [], evaluations: [], weights: {} });
     if (endpoint === "/api/notifications/recipients")
       return state.failRecipients
         ? reply({ error: "Recipients unavailable" }, 503)
@@ -514,6 +515,68 @@ async function fixture(
     );
     await close();
   });
+  await test("desktop prompt hides when enabled and settings can disable notifications", async () => {
+    const { page, close } = await fixture("student", 1440, []);
+    await page.getByRole("button", { name: "Enable browser notifications", exact: true }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Send test desktop notification", exact: true }).count(), 0);
+    await page.evaluate(() => {
+      Object.defineProperty(Notification, "permission", { configurable: true, get: () => "granted" });
+      localStorage.setItem("school-web-push-token", "web:fixture");
+      let subscribed = true;
+      Object.defineProperty(navigator.serviceWorker, "getRegistration", { configurable: true, value: async () => ({
+        pushManager: { getSubscription: async () => subscribed ? { unsubscribe: async () => { subscribed = false; return true; } } : null },
+        getNotifications: async () => [],
+      }) });
+      window.dispatchEvent(new Event("school-push-settings"));
+    });
+    await page.getByRole("button", { name: "Enable browser notifications", exact: true }).waitFor({ state: "hidden" });
+    await page.getByRole("button", { name: "Open profile", exact: true }).click();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    const toggle = page.getByRole("switch", { name: "Browser notifications", exact: true });
+    await toggle.waitFor();
+    assert.equal(await toggle.isChecked(), true);
+    await toggle.click();
+    await page.getByText("Browser notifications are off. Your updates are still available in the inbox.", { exact: true }).waitFor();
+    assert.equal(await toggle.isChecked(), false);
+    assert.equal(await page.evaluate(() => localStorage.getItem("school-web-push-disabled")), "true");
+    await screenshot(page, "desktop-notification-settings.png");
+    await page.route("**/api/notifications/push-config", route => route.fulfill({ contentType: "application/json", body: JSON.stringify({ publicKey: "AQID" }) }));
+    await page.evaluate(() => {
+      let subscribed = false;
+      const subscription = { endpoint: "https://fcm.googleapis.com/fixture", toJSON: () => ({ keys: { p256dh: "fixture", auth: "fixture" } }), unsubscribe: async () => { subscribed = false; return true; } };
+      const registration = {
+        pushManager: { getSubscription: async () => subscribed ? subscription : null, subscribe: async () => { subscribed = true; return subscription; } },
+        getNotifications: async () => [],
+      };
+      Object.defineProperty(navigator.serviceWorker, "getRegistration", { configurable: true, value: async () => registration });
+      Object.defineProperty(navigator.serviceWorker, "register", { configurable: true, value: async () => registration });
+      Object.defineProperty(navigator.serviceWorker, "ready", { configurable: true, value: Promise.resolve(registration) });
+    });
+    await toggle.click();
+    await page.getByRole("button", { name: "Send test desktop notification", exact: true }).waitFor();
+    assert.equal(await toggle.isChecked(), true);
+    assert.equal(await page.evaluate(() => localStorage.getItem("school-web-push-disabled")), null);
+    await page.getByRole("button", { name: "Send test desktop notification", exact: true }).waitFor();
+    await close();
+  });
+  for (const width of [390, 1440]) await test(`desktop responsive top banner ${width}`, async () => {
+    const { page, close } = await fixture("student", width, seed(), false);
+    const box = await page.getByTestId("floating-notification").boundingBox();
+    assert(box);
+    assert(box.y < 40);
+    assert(Math.abs(box.width - Math.min(width, 1200)) < 2);
+    assert(Math.abs(box.x - (width - box.width) / 2) < 2);
+    await screenshot(page, `top-notification-${width}.png`);
+    await close();
+  });
+  await test("browser push enable button explains blocked permission", async () => {
+    const { page, close } = await fixture("student", 1440, []);
+    await page.evaluate(() => Object.defineProperty(Notification, "permission", { configurable: true, get: () => "denied" }));
+    await page.getByRole("button", { name: "Enable browser notifications", exact: true }).click();
+    await page.getByText("Notifications are blocked. Allow them in your browser’s site settings, then try again.", { exact: true }).waitFor();
+    await screenshot(page, "browser-push-permission.png");
+    await close();
+  });
   await test("floating updates, dismissal, unread badge and opening the inbox", async () => {
     const { page, state, close } = await fixture("student", 390, seed(), false);
     assert.equal(await page.getByTestId("notification-badge").innerText(), "2");
@@ -538,7 +601,7 @@ async function fixture(
     assert.equal(await page.getByTestId("notification-badge").innerText(), "3");
     await screenshot(page, "floating-notification.png");
     await page
-      .getByRole("button", { name: "Open new notification", exact: true })
+      .getByRole("button", { name: "Open notification inbox", exact: true })
       .click();
     await page
       .getByRole("button", { name: "Mark all as read", exact: true })
@@ -591,6 +654,9 @@ async function fixture(
 })()
   .catch((error) => {
     console.error(error);
+    for (const context of browser?.contexts() ?? []) for (const page of context.pages()) {
+      void page.locator("body").innerText().then(text => console.error(text.slice(0, 1800))).catch(() => {});
+    }
     process.exitCode = 1;
   })
   .finally(async () => {

@@ -155,6 +155,7 @@ model Student {
 }
 
 model Teacher {
+  courseAssignments CourseTeacher[]
   performanceWeights Json? @map("performance_weights")
   evaluations LessonEvaluation[]
   id             String  @id @default(uuid()) @db.Uuid
@@ -185,6 +186,7 @@ model Admin {
 }
 
 model Course {
+  teachers    CourseTeacher[]
   id          String   @id @default(uuid()) @db.Uuid
   name        String
   category    String
@@ -202,6 +204,17 @@ model Course {
   paymentUploads PaymentUpload[]
   @@index([teacherId])
   @@map("courses")
+}
+
+model CourseTeacher {
+  courseId String @map("course_id") @db.Uuid
+  teacherId String @map("teacher_id") @db.Uuid
+  weeklySessions Int? @map("weekly_sessions")
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  @@id([courseId, teacherId])
+  @@index([teacherId])
+  @@map("course_teachers")
 }
 
 model Enrollment {

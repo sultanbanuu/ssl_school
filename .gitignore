@@ -9,3 +9,5 @@ dist/
 *.log
 .expo/
 .expo
+tmp/
+mobile/dist*/

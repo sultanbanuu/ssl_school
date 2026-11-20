@@ -50,13 +50,21 @@ try {
     await page.getByTestId("student-lesson-lesson").click();
     await page.getByRole("button", { name: "Manage lesson", exact: true }).click();
   }
+  await page.getByRole("tab", { name: "Lesson", exact: true }).click();
+  await page.getByTestId("student-lesson-lesson").click();
+  await page.getByRole("heading", { name: "Everyday English", exact: true }).waitFor();
+  await page.getByText("Baku · UTC+4", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Back to lessons", exact: true }).click();
+  await page.getByTestId("student-lesson-lesson").waitFor();
+  assert.equal(await page.getByRole("button", { name: "Weekly schedule", exact: true }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: "Book a free trial with Sayad", exact: true }).count(), 0);
+  console.log("PASS student Lesson tab shows lesson cards and details without the scheduling or trial buttons");
   await manage();
-  await page.getByText("Teacher’s available times", { exact: true }).waitFor();
+  await page.getByText("Emma Smith’s available times", { exact: true }).waitFor();
   assert.equal(await page.getByText("15-minute trial opening", { exact: true }).count(), 0);
   // A calendar change becomes visible without a refresh click or navigation.
   slot.endsAt = "2099-11-05T19:00:00+04:00";
   await page.getByRole("button", { name: "Show more openings (1)", exact: true }).waitFor({ timeout: 22000 });
-  await page.getByText("Reschedule lesson", { exact: true }).click();
   await page.getByRole("radio", { name: /16:00–17:00/ }).click();
   await page.getByRole("button", { name: "Send reschedule request", exact: true }).click();
   await page.getByText(/Reschedule pending:/).waitFor();
@@ -66,7 +74,7 @@ try {
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await page.getByText("Status: approved", { exact: true }).waitFor();
   role = "student"; await page.reload(); await manage();
-  await page.getByText("Monthly limit reached", { exact: true }).waitFor();
+  await page.getByText(/0 remaining\./).waitFor();
   await page.getByText("Cancel lesson", { exact: true }).click();
   await page.getByRole("button", { name: "Confirm cancellation", exact: true }).click();
   await page.getByText(/This lesson is cancelled/).waitFor();
@@ -78,7 +86,7 @@ try {
   await page.getByRole("button", { name: "Restore cancelled lesson", exact: true }).click();
   await page.getByText("No student cancellations.", { exact: true }).waitFor();
   role = "student"; await page.reload(); await manage();
-  await page.getByText(/2 of 3 rescheduling requests/).waitFor();
+  await page.getByText(/1 remaining\./).waitFor();
   await page.getByRole("tab", { name: "Lesson details", exact: true }).click();
   await page.getByText("Rescheduled", { exact: true }).waitFor();
   assert(calls.includes("PATCH /api/reschedule-requests/request"));

@@ -1,5 +1,6 @@
 import type { PrismaClient } from "./generated/prisma/client";
 import { scheduleLock, serialize, storedBounds } from "./modules/lessons/service";
+import { lessonSchedule, studentName } from "./shared/lesson-notification";
 
 export async function deliverLessonReminders(
   db: PrismaClient,
@@ -15,7 +16,7 @@ export async function deliverLessonReminders(
           reminderSentAt: null,
         },
         include: {
-          enrollment: { include: { student: true, course: true } },
+          enrollment: { include: { student: { include: { profile: true } }, course: true } },
           teacher: true,
         },
         take: 100,
@@ -35,8 +36,8 @@ export async function deliverLessonReminders(
             data: recipients.map((userId) => ({
               userId,
               type: "lesson_reminder",
-              title: `Lesson reminder: ${lesson.enrollment.course.name}`,
-              message: `${slot.date} · ${lesson.allDay ? "All day" : `${slot.startTime}–${slot.endTime}`} (Asia/Baku)`,
+              title: userId === lesson.teacher.profileId ? `Lesson reminder: ${studentName(lesson.enrollment.student.profile)}` : `Lesson reminder: ${lesson.enrollment.course.name}`,
+              message: `${userId === lesson.teacher.profileId ? `${studentName(lesson.enrollment.student.profile)} · ` : ""}${lesson.enrollment.course.name} · ${lessonSchedule(slot)}`,
             })),
           });
           delivered += recipients.length;

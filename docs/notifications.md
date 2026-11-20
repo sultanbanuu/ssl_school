@@ -1,8 +1,22 @@
 # School notifications
 
+Automatic teacher inbox notifications for lessons include the student's first name and surname in the title, plus their full name, course, lesson date and full time range in Asia/Baku in the message. Rescheduling requests show the original and requested schedules; decisions include the confirmed or unchanged schedule and any review note. Cancellation and restoration messages include the affected schedule. Overnight and all-day lessons include their end date. These details apply to newly generated notifications; existing inbox messages retain their saved text.
+
 Only admins can compose and send announcements. Managers, teachers, and students cannot send or list recipients, including through direct API calls. Admins choose one student or All students; non-student recipients are rejected. Broadcasts include inactive profiles that still have the student role.
 
-Students receive announcements in their private inbox and, after enabling notifications, on registered iOS/Android devices while the app is closed. Browser builds use the in-app inbox, badge, and floating banner. Existing automatic lesson/rescheduling inbox messages are unchanged.
+Students receive announcements in their private inbox and, after enabling notifications, on registered iOS/Android devices or browsers while the app/tab is closed. Browser builds also show an inbox badge and a floating, dismissible banner that opens the inbox. Existing automatic lesson/rescheduling inbox messages are unchanged.
+
+## Browser push and local testing
+
+1. Run `bun scripts/setup-web-push.ts` once to generate server-only VAPID settings in `.env`, then restart the API. For production pass a real contact, e.g. `bun scripts/setup-web-push.ts mailto:admin@your-domain.com` on an unconfigured environment, and set all three `WEB_PUSH_*` variables on the API host. Keep the same keys across restarts. Never expose the private key in an `EXPO_PUBLIC_*` variable.
+2. Run the API (`bun run dev`) and web app (`bun run mobile:web`). Open `http://localhost:8082`, sign in as a student, open Notifications, click **Enable browser notifications**, and grant permission. If blocked, change the browser's site permission and retry.
+   The inbox enable prompt disappears once this browser is registered. Open **Profile → Settings → Browser notifications** for the on/off switch and **Send test desktop notification**. Switching off unregisters this browser and stays off across reloads; inbox messages remain available. The test checks browser/OS display and click-to-inbox without contacting the push provider; use the admin announcement in the next step to verify server delivery.
+3. Send an announcement from a separate admin browser session. Verify the floating banner while viewing another student screen, and the operating-system notification with the student tab closed. Keep the API and browser running and allow notifications in OS settings. Delivery normally begins within 15 seconds.
+4. Clicking a system notification opens the inbox for the matching signed-in student. Signing out unregisters that browser subscription. Expired subscriptions are removed; temporary failures use the existing queue retry policy.
+
+No publication is required for desktop localhost testing. Other origins require HTTPS: a phone accessing `http://192.168.x.x` is not localhost and needs a trusted HTTPS development URL. iPhone/iPad web push requires installing the site to the Home Screen. Serve `public/school-push-sw.js` at `/school-push-sw.js` with a JavaScript content type (Expo copies it into the web export). Notifications depend on browser and OS settings; closing the entire browser may prevent delivery.
+
+Browser subscriptions are stored as validated `web:` tokens in the existing device/queue tables, so this feature adds no database migration. Only approved browser push-provider endpoints are accepted. The existing student-only registration and admin-only announcement permissions apply. The public key is available to authenticated clients at `GET /api/notifications/push-config`.
 
 Admin flow: Notifications → Send a school update → select student or All students → enter title/message → Send. Titles allow 1–160 characters and messages 1–5000 after trimming. Long messages are shortened in device previews; full text stays in the inbox. Confirmation means the message was saved and device delivery queued, not that a device displayed it.
 

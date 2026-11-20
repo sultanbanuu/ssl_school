@@ -1,3 +1,7 @@
+import { SwipeBack } from "./SwipeBack";
+import { BackIcon } from "./CourseIcon";
+import { SchoolIcon } from "./SchoolIcon";
+import { studentContentWidth } from "./student-layout";
 import { LessonBadge } from "./StatusBadge";
 
 import { phoneSchema } from "../src/shared/phone";
@@ -8,6 +12,8 @@ import {
   ActivityIndicator,
   AppState,
   BackHandler,
+  Image,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -31,22 +37,39 @@ import {
 
 import { GlassTabBar } from "./GlassTabBar";
 
-import { schoolRequest } from "./auth-client";
+import { schoolRequest, SessionExpiredError } from "./auth-client";
 
-import { Profile, Payment, money } from "./src/api";
+import { Profile, money } from "./src/api";
 
 import { Performance } from "./Performance";
 
 import { StudentLessons } from "./StudentLessons";
 
 import { Availability } from "./Availability";
+import { StudentCourse, type Course } from "./StudentCourse";
+import { courseDetails } from "./course-details";
+import { courseCatalog, coursePosition } from "../src/shared/course-catalog";
 
 import { Notifications } from "./src/Notifications";
+import { BrowserNotificationSettings } from "./src/BrowserNotificationSettings";
 
 import { useNotificationUpdates } from "./src/useNotificationUpdates";
-import { listenForPush } from "./src/devicePush";
+import { enableDevicePush, listenForPush } from "./src/devicePush";
 
 import { History, NewPayment, Detail } from "./SchoolApp";
+
+const courseCardImages = [
+  require("./assets/courses/upgrade-your-level.png"),
+  require("./assets/courses/english-in-context.png"),
+  require("./assets/courses/all-in-one-english.png"),
+  require("./assets/courses/lean-leader.png"),
+  require("./assets/courses/academic-exam-prep.png"),
+];
+
+const courseCardColorOverrides: Partial<Record<number, string>> = {
+  2: "#b4d8ff",
+  4: "#ffde59",
+};
 
 type Props = {
   profile: Profile;
@@ -61,17 +84,17 @@ type Screen =
   | "account-settings"
   | "Today"
   | "Lesson"
-  | "Practice"
   | "Profile"
   | "notifications"
   | "payments"
   | "new-payment"
   | "payment-detail"
-  | "availability";
-
-type Course = { id: string; name: string; price: string };
+  | "availability"
+  | "course-detail";
 
 type Enrollment = { createdAt: string; courseId: string };
+const trialPageHash = "#/trial-lessons";
+const isTrialPage = () => Platform.OS === "web" && window.location.hash === trialPageHash;
 
 type Lesson = {
   status: string;
@@ -85,53 +108,6 @@ type Lesson = {
 };
 
 const tabs = ["Today", "Lesson", "Profile"] as const;
-
-const readings = [
-  {
-    title: "A little change, every day",
-    category: "DAILY LIFE",
-    level: "A2",
-    time: "3 min",
-    color: "#d9c5ff",
-    icon: "sunny-outline" as const,
-    text: "Every morning, Lina takes a short walk before breakfast. At first, it was difficult to wake up early. Now it is her favourite habit. She notices the quiet streets and enjoys the fresh air. This small change gives her more energy for the day.",
-    words: [
-      ["habit", "something you do regularly"],
-      ["notice", "to see or become aware of something"],
-      ["energy", "the strength to be active"],
-    ],
-  },
-
-  {
-    title: "The café around the corner",
-    category: "OUT & ABOUT",
-    level: "A2",
-    time: "4 min",
-    color: "#f6d5aa",
-    icon: "cafe-outline" as const,
-    text: "Sam discovers a cosy café in his neighbourhood. The owner welcomes him and recommends a homemade cake. While he waits, Sam starts a conversation with another customer. They both love travelling and exchange stories about their favourite places.",
-    words: [
-      ["cosy", "comfortable and pleasant"],
-      ["recommend", "to suggest a good choice"],
-      ["exchange", "to give and receive"],
-    ],
-  },
-
-  {
-    title: "A weekend without a screen",
-    category: "NEW PERSPECTIVES",
-    level: "B1",
-    time: "5 min",
-    color: "#b9dfcd",
-    icon: "leaf-outline" as const,
-    text: "Maya decides to spend the weekend offline. Without constant notifications, she feels more curious about the world around her. She explores a nearby forest and sketches the trees. By Sunday evening, she realises that taking a break can help her focus on what matters.",
-    words: [
-      ["constant", "happening all the time"],
-      ["explore", "to discover a place by looking around"],
-      ["focus", "to give your attention to something"],
-    ],
-  },
-];
 
 async function allPages<T>(path: string): Promise<T[]> {
   const rows: T[] = [];
@@ -164,7 +140,15 @@ function StudentShell({
 }: Props) {
   const insets = useSafeAreaInsets();
 
-  const [screen, setScreen] = useState<Screen>("Today");
+  const [screen, updateScreen] = useState<Screen>(() => isTrialPage() ? "availability" : "Today");
+  const setScreen = useCallback((next: Screen) => {
+    if (next !== "availability" && isTrialPage()) {
+      const url = new URL(window.location.href);
+      url.hash = "";
+      window.history.replaceState(window.history.state, "", url);
+    }
+    updateScreen(next);
+  }, []);
 
   const [profile, setProfile] = useState(initialProfile);
 
@@ -231,16 +215,30 @@ function StudentShell({
 
   const [enrollments, setEnrollments] = useState<Enrollment[] | null>(null);
 
-  const [payments, setPayments] = useState<Payment[] | null>(null);
   const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [lessonCount, setLessonCount] = useState<number | null>(null);
 
   const [loading, setLoading] = useState(true);
+  const loadingToday = useRef(false);
+  const lastTodayLoad = useRef(0);
 
   const [loadError, setLoadError] = useState("");
 
-  const [reading, setReading] = useState<number | null>(null);
 
   const [selectedCourse, setSelectedCourse] = useState<string | null>(null);
+  const [customLessonCount, setCustomLessonCount] = useState(1);
+  const [trialFromCourse, setTrialFromCourse] = useState(false);
+  const currentCourse = courses.find((course) => course.id === selectedCourse);
+  const canBookTrial = enrollments?.length === 0;
+  const openTrial = (fromCourse: boolean) => {
+    if (Platform.OS === "web") {
+      const url = new URL(window.location.href);
+      url.hash = trialPageHash;
+      window.history.replaceState(window.history.state, "", url);
+    }
+    setTrialFromCourse(fromCourse);
+    setScreen("availability");
+  };
 
   const updates = useNotificationUpdates(profile.id);
 
@@ -248,24 +246,28 @@ function StudentShell({
 
   failureRef.current = onFailure;
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (showRefresh = true) => {
+    if (loadingToday.current) return;
+    loadingToday.current = true;
+    setLoading(showRefresh || lastTodayLoad.current === 0);
+    setLoadError("");
 
     try {
       const now = new Date();
 
-      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-
-      const [c, e, l, p] = await Promise.all([
+      const [c, e, l] = await Promise.all([
         allPages<Course>("/courses"),
         allPages<Enrollment>("/enrollments"),
-        allPages<Lesson>(`/lessons?status=scheduled&from=${today}`),
-        allPages<Payment>("/payments?status=approved"),
+        allPages<Lesson>("/lessons?status=scheduled"),
       ]);
 
-      setCourses(c);
+      setCourses(
+        c.filter((course) => coursePosition(course.name) < courseCatalog.length)
+          .sort((a, b) => coursePosition(a.name) - coursePosition(b.name)),
+      );
+      lastTodayLoad.current = Date.now();
       setEnrollments(e);
-      setPayments(p);
+      setLessonCount(l.length);
 
       setLessons(
         l
@@ -278,29 +280,28 @@ function StudentShell({
             `${a.date} ${a.startTime}`.localeCompare(
               `${b.date} ${b.startTime}`,
             ),
-          )
-          .slice(0, 3),
+          ),
       );
 
-      setLoadError("");
     } catch (e) {
       setLoadError(
         e instanceof Error
           ? e.message
           : "Unable to load your learning. Pull down to retry.",
       );
-      failureRef.current(e);
+      if (e instanceof SessionExpiredError) failureRef.current(e);
     } finally {
+      loadingToday.current = false;
       setLoading(false);
     }
   }, [profile.id]);
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") void load();
+      if (state === "active" && screen === "Today") void load();
     });
     return () => sub.remove();
-  }, [load]);
+  }, [load, screen]);
 
   const parentScreen: Screen =
     screen === "account-settings" || screen === "payments"
@@ -309,52 +310,26 @@ function StudentShell({
         ? "payments"
         : screen === "settings"
           ? "Profile"
-          : "Today";
+          : screen === "availability" && trialFromCourse && currentCourse
+            ? "course-detail"
+            : "Today";
+
+  const goBack = useCallback(() => setScreen(parentScreen), [parentScreen, setScreen]);
 
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       if (screen === "Today") return false;
-      setScreen(parentScreen);
+      goBack();
       return true;
     });
     return () => sub.remove();
-  }, [screen, parentScreen]);
+  }, [screen, goBack]);
 
   useEffect(() => {
-    if (screen === "Today") void load();
+    if (screen === "Today" && Date.now() - lastTodayLoad.current > 30_000) void load(false);
   }, [screen, load]);
 
-  const latestEndByCourse = new Map<string, string>();
-  for (const payment of payments ?? []) {
-    if (
-      payment.status === "approved" &&
-      payment.endDate &&
-      (!latestEndByCourse.has(payment.courseId) ||
-        payment.endDate > latestEndByCourse.get(payment.courseId)!)
-    )
-      latestEndByCourse.set(payment.courseId, payment.endDate);
-  }
-  const dueDates = [...latestEndByCourse.entries()]
-    .filter(([courseId]) => enrollments?.some((e) => e.courseId === courseId))
-    .map(([, end]) => end);
-  const todayBaku = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Baku",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-  const days =
-    payments === null || !dueDates.length
-      ? null
-      : Math.max(
-          0,
-          Math.min(
-            ...dueDates.map((end) =>
-              Math.round((Date.parse(end) - Date.parse(todayBaku)) / 86400000),
-            ),
-          ),
-        );
-  const paymentWarning = days !== null && days <= 3;
+  const openingToday = enrollments === null && loading;
 
   const openNotifications = () => {
     updates.dismiss();
@@ -362,11 +337,21 @@ function StudentShell({
   };
   useEffect(
     () => listenForPush(profile.id, () => setScreen("notifications")),
-    [profile.id],
+    [profile.id, setScreen],
   );
+  useEffect(() => {
+    const register = () => { void enableDevicePush(false).catch(() => {}); };
+    register();
+    const subscription = AppState.addEventListener("change", state => {
+      if (state === "active") register();
+    });
+    return () => subscription.remove();
+  }, [profile.id]);
 
-  const activeTab = tabs.includes(screen as (typeof tabs)[number])
-    ? screen
+  const activeTab = screen === "course-detail" || (screen === "availability" && trialFromCourse)
+    ? "Today"
+    : tabs.includes(screen as (typeof tabs)[number])
+      ? screen
     : [
           "settings",
           "account-settings",
@@ -394,10 +379,20 @@ function StudentShell({
             ? "New payment"
             : screen === "payment-detail"
               ? "Payment details"
-              : null;
+              : screen === "course-detail"
+                ? "Course details"
+                : screen === "availability"
+                  ? "Free trial"
+                  : null;
+
+  const backLabel = parentScreen === "course-detail" ? "course details"
+    : parentScreen === "Today" ? "Today"
+      : parentScreen === "Profile" ? "profile"
+        : parentScreen === "settings" ? "settings" : "billing";
 
   return (
     <SafeAreaView edges={["top", "left", "right"]} style={s.safe}>
+      <SwipeBack enabled={screen !== "Today"} onBack={goBack} screenKey={screen}>
       <StatusBar style="light" />
 
       {screen === "Profile" ? (
@@ -412,15 +407,15 @@ function StudentShell({
             onPress={() => setScreen("settings")}
             style={s.iconButton}
           >
-            <Ionicons name="settings-outline" size={24} color="#f5f3fa" />
+            <SchoolIcon name="settings" size={28} />
           </Pressable>
         </View>
       ) : sectionTitle ? (
         <View style={s.header}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Back to ${parentScreen === "Profile" ? "profile" : parentScreen === "settings" ? "settings" : "billing"}`}
-            onPress={() => setScreen(parentScreen)}
+            accessibilityLabel={`Back to ${backLabel}`}
+            onPress={goBack}
             style={s.iconButton}
           >
             <Ionicons name="chevron-back" size={24} color="#f5f3fa" />
@@ -433,6 +428,11 @@ function StudentShell({
           >
             {sectionTitle}
           </Text>
+          {screen === "settings" && (
+            <View style={s.iconButton}>
+              <SchoolIcon name="settings" selected size={28} />
+            </View>
+          )}
         </View>
       ) : (
         <View style={s.header}>
@@ -442,30 +442,20 @@ function StudentShell({
             onPress={() => setScreen("Profile")}
             style={s.avatar}
           >
-            <Ionicons name="person-circle" size={44} color="#777c8b" />
+            <SchoolIcon name="profile-gray" size={44} />
           </Pressable>
 
           <View
             accessibilityLabel={
-              days === null
-                ? "Payment due date unavailable"
-                : `${days} days until payment is due`
+              lessonCount === null
+                ? "Lesson count unavailable"
+                : `${lessonCount} scheduled ${lessonCount === 1 ? "lesson" : "lessons"} remaining`
             }
-            style={[
-              s.dayBadge,
-              paymentWarning && {
-                backgroundColor: "#3b2228",
-                borderColor: "#e65b6e",
-              },
-            ]}
+            style={s.dayBadge}
           >
-            <Ionicons
-              name={paymentWarning ? "alert-circle-outline" : "flash"}
-              size={19}
-              color={paymentWarning ? "#ff7c8d" : "#a49dff"}
-            />
-            <Text style={[s.dayText, paymentWarning && { color: "#ff7c8d" }]}>
-              {days ?? "—"} {days === 1 ? "DAY" : "DAYS"}
+            <Ionicons name="flash" size={19} color="#a49dff" />
+            <Text style={s.dayText}>
+              {lessonCount ?? "—"} {lessonCount === 1 ? "LESSON" : "LESSONS"}
             </Text>
           </View>
 
@@ -476,7 +466,7 @@ function StudentShell({
             onPress={openNotifications}
             style={s.iconButton}
           >
-            <Ionicons name="notifications-outline" size={24} color="#f5f3fa" />
+            <SchoolIcon name="notification" selected={screen === "notifications"} size={28} />
             {updates.count > 0 && (
               <View testID="notification-badge" style={s.dot}>
                 <Text style={s.dotText}>
@@ -497,14 +487,14 @@ function StudentShell({
       <View
         style={{
           flex: 1,
-          paddingBottom: screen === "Today" ? 0 : 96 + insets.bottom,
+          paddingBottom: screen === "Today" || screen === "availability" ? 0 : 96 + insets.bottom,
         }}
       >
         {screen === "Today" ? (
           <ScrollView
             refreshControl={
               <RefreshControl
-                refreshing={loading}
+                refreshing={loading && !openingToday}
                 onRefresh={load}
                 tintColor="#a49dff"
               />
@@ -514,29 +504,28 @@ function StudentShell({
               { paddingBottom: 112 + insets.bottom },
             ]}
           >
-            <Text style={s.eyebrow}>YOUR DAILY DOSE OF PROGRESS</Text>
             <Text style={s.greeting}>
               Hi, {profile.firstName || "there"}
               <Text style={{ color: "#a49dff" }}>.</Text>
             </Text>
-            <Text style={s.muted}>
-              A little learning. A world of possibilities.
-            </Text>
+            {openingToday && (
+              <View style={s.loadingToday} accessibilityRole="progressbar" accessibilityLabel="Loading courses and lessons" accessibilityState={{ busy: true }}>
+                <ActivityIndicator color="#a49dff" />
+                <Text style={s.muted}>Loading courses and lessons…</Text>
+              </View>
+            )}
 
             {!!loadError && (
-              <Pressable accessibilityRole="button" onPress={load}>
+              <Pressable accessibilityRole="button" onPress={() => void load()}>
                 <Text style={s.error}>{loadError} Tap to retry.</Text>
               </Pressable>
             )}
 
             <View style={s.sectionHeading}>
               <Text style={s.heading}>Available courses</Text>
-              <Text style={s.caption}>FIND YOUR NEXT STEP</Text>
             </View>
 
-            {loading && !courses.length ? (
-              <ActivityIndicator color="#a49dff" />
-            ) : !courses.length ? (
+            {enrollments === null ? null : !courses.length ? (
               <Text style={s.empty}>
                 Your available courses will appear here.
               </Text>
@@ -546,79 +535,56 @@ function StudentShell({
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ gap: 14, paddingBottom: 6 }}
               >
-                {courses.map((course, i) => (
-                  <Pressable
-                    key={course.id}
-                    accessibilityRole="button"
-                    accessibilityLabel={`View ${course.name}`}
-                    onPress={() =>
-                      setSelectedCourse(
-                        selectedCourse === course.id ? null : course.id,
-                      )
-                    }
-                    style={[
-                      s.course,
-                      {
-                        backgroundColor: ["#8178ff", "#c6d9cf", "#f5d36c"][
-                          i % 3
-                        ],
-                      },
-                    ]}
-                  >
-                    <View style={s.courseTop}>
-                      <Text style={s.courseKicker}>
-                        {enrollments?.some((e) => e.courseId === course.id)
-                          ? "YOUR COURSE"
-                          : "EXPLORE & GROW"}
-                      </Text>
-                      <Ionicons
-                        name="arrow-up-right-box-outline"
-                        size={22}
-                        color="#252033"
-                      />
-                    </View>
+                {courses.map((course) => {
+                  const details = courseDetails(course.name);
+                  const position = coursePosition(course.name);
+                  const accent = courseCardColorOverrides[position] ?? details?.accent ?? "#bdb7ff";
+                  return (
+                    <Pressable
+                      key={course.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={`View ${course.name}`}
+                      onPress={() => {
+                        setSelectedCourse(course.id);
+                        setCustomLessonCount(1);
+                        setScreen("course-detail");
+                      }}
+                      style={s.course}
+                    >
+                      <View style={[s.courseArtwork, { backgroundColor: accent }]}>
+                        <Image
+                          accessible={false}
+                          source={courseCardImages[position]}
+                          resizeMode="contain"
+                          style={s.courseArt}
+                        />
+                      </View>
 
-                    <View style={s.courseArt}>
-                      <View style={s.orbit} />
-                      <Ionicons
-                        name={i % 2 ? "chatbubbles-outline" : "book-outline"}
-                        size={68}
-                        color="#39304d"
-                      />
-                    </View>
-
-                    <Text style={s.courseTitle}>{course.name}</Text>
-                    <View style={s.courseTop}>
-                      <Text style={s.courseMeta}>
-                        {money(course.price)} / month
-                      </Text>
-                      <Ionicons
-                        name="arrow-forward"
-                        size={22}
-                        color="#252033"
-                      />
-                    </View>
-
-                    {selectedCourse === course.id && (
-                      <Text style={s.courseMeta}>
-                        {enrollments?.some((e) => e.courseId === course.id)
-                          ? "You’re enrolled. Open Lesson to see your schedule."
-                          : "Contact your school to enroll in this course."}
-                      </Text>
-                    )}
-                  </Pressable>
-                ))}
+                      <View style={s.courseFooter}>
+                        <View style={s.courseCopy}>
+                          <Text style={s.courseTitle}>{course.name}</Text>
+                          <Text style={s.courseMeta}>
+                            {details?.custom ? "Fərdi dərs paketi" : details?.price ?? `${money(course.price)} / month`}
+                          </Text>
+                        </View>
+                        <View style={s.courseAction}>
+                          <Text style={s.courseActionText}>View</Text>
+                        </View>
+                      </View>
+                    </Pressable>
+                  );
+                })}
               </ScrollView>
             )}
 
-            {enrollments?.length === 0 && (
+            {canBookTrial && (
               <Pressable
                 accessibilityRole="button"
-                onPress={() => setScreen("availability")}
+                onPress={() => openTrial(false)}
                 style={s.profileRow}
               >
                 <View style={{ flex: 1, gap: 5 }}>
-                  <Text style={s.cardTitle}>Book a trial with Sayad</Text>
+                  <Text style={s.cardTitle}>Book a free trial with Sayad</Text>
                   <Text style={s.muted}>Explore available 15-minute times</Text>
                 </View>
                 <Ionicons name="chevron-forward" color="#a49dff" size={20} />
@@ -637,7 +603,7 @@ function StudentShell({
 
             <View style={s.lessonGroup}>
               {lessons.length ? (
-                lessons.map((lesson, i) => {
+                lessons.slice(0, 3).map((lesson, i) => {
                   const date = new Date(`${lesson.date}T12:00:00`);
                   return (
                     <Pressable
@@ -677,75 +643,15 @@ function StudentShell({
                     </Pressable>
                   );
                 })
-              ) : (
+              ) : enrollments !== null && (
                 <Text style={s.empty}>
                   No upcoming lessons yet. Your next bookings will appear here.
                 </Text>
               )}
             </View>
-
-            <View style={s.sectionHeading}>
-              <Text style={s.heading}>Read & discover</Text>
-              <Text style={s.caption}>3 SAMPLE TASKS</Text>
-            </View>
-            <Text style={[s.muted, { marginTop: -10, marginBottom: 16 }]}>
-              Small stories. New words. Bigger confidence.
-            </Text>
-
-            {readings.map((item, i) => (
-              <View key={item.title} style={s.readingCard}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityState={{ expanded: reading === i }}
-                  onPress={() => setReading(reading === i ? null : i)}
-                  style={s.readingTop}
-                >
-                  <View
-                    style={[s.readingIcon, { backgroundColor: item.color }]}
-                  >
-                    <Ionicons name={item.icon} size={29} color="#30283c" />
-                  </View>
-                  <View style={{ flex: 1, gap: 5 }}>
-                    <Text style={s.caption}>
-                      {item.category} · {item.level}
-                    </Text>
-                    <Text style={s.cardTitle}>{item.title}</Text>
-                    <Text style={s.muted}>{item.time} read · 3 new words</Text>
-                  </View>
-                  <Ionicons
-                    name={reading === i ? "chevron-up" : "chevron-down"}
-                    size={18}
-                    color="#a49dff"
-                  />
-                </Pressable>
-                {reading === i && <Text style={s.passage}>{item.text}</Text>}
-                <View style={s.vocabulary}>
-                  {item.words.map(([word, meaning]) => (
-                    <View key={word} style={{ gap: 4 }}>
-                      <Text style={s.word}>{word}</Text>
-                      {reading === i && (
-                        <Text style={s.definition}>{meaning}</Text>
-                      )}
-                    </View>
-                  ))}
-                </View>
-              </View>
-            ))}
           </ScrollView>
         ) : screen === "Lesson" ? (
-          <StudentLessons onFailure={onFailure} />
-        ) : screen === "Practice" ? (
-          <View style={s.placeholder}>
-            <Ionicons
-              name="game-controller-outline"
-              size={60}
-              color="#a49dff"
-            />
-            <Text style={s.greeting}>Practice</Text>
-            <Text style={s.muted}>
-              Your next learning adventure is coming soon.
-            </Text>
-          </View>
+          <StudentLessons onFailure={onFailure} onLessonCountChange={setLessonCount} />
         ) : screen === "Profile" ? (
           <Performance
             profile={profile}
@@ -754,6 +660,7 @@ function StudentShell({
           />
         ) : screen === "settings" ? (
           <ScrollView contentContainerStyle={[s.content, { flexGrow: 1 }]}>
+            <BrowserNotificationSettings userId={profile.id} />
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Account settings"
@@ -801,7 +708,7 @@ function StudentShell({
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={s.content}
           >
-            <View style={s.readingCard}>
+            <View style={s.accountCard}>
               {[
                 { label: "Name", value: firstName, change: setFirstName },
                 { label: "Surname", value: lastName, change: setLastName },
@@ -890,12 +797,23 @@ function StudentShell({
               </Text>
             </Pressable>
           </ScrollView>
+        ) : screen === "course-detail" ? (
+          currentCourse ? (
+            <StudentCourse
+              key={currentCourse.id}
+              course={currentCourse}
+              count={customLessonCount}
+              onCountChange={setCustomLessonCount}
+              enrolled={enrollments?.some((entry) => entry.courseId === currentCourse.id) ?? false}
+              onTrial={() => openTrial(true)}
+            />
+          ) : <Text style={s.empty}>This course is no longer available.</Text>
         ) : (
           <View style={s.legacy}>
             {screen === "notifications" ? (
               <Notifications profile={profile} onCount={updates.syncCount} />
             ) : screen === "availability" ? (
-              <ScrollView>
+              <ScrollView contentContainerStyle={s.calendarPage}>
                 <Availability role="student" onFailure={onFailure} />
               </ScrollView>
             ) : screen === "payments" ? (
@@ -907,24 +825,22 @@ function StudentShell({
                 }}
                 create={() => setScreen("new-payment")}
               />
+            ) : screen === "new-payment" ? (
+              <NewPayment
+                done={(id) => {
+                  setPaymentId(id);
+                  setScreen("payment-detail");
+                }}
+              />
             ) : (
               <>
                 <Pressable
                   onPress={() => setScreen("payments")}
                   style={s.utility}
                 >
-                  <Text style={{ color: "#a49dff" }}>‹ Back to payments</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}><BackIcon /><Text style={{ color: "#a49dff" }}>Back to payments</Text></View>
                 </Pressable>
-                {screen === "new-payment" ? (
-                  <NewPayment
-                    done={(id) => {
-                      setPaymentId(id);
-                      setScreen("payment-detail");
-                    }}
-                  />
-                ) : (
-                  <Detail id={paymentId} admin={false} />
-                )}
+                <Detail id={paymentId} admin={false} />
               </>
             )}
           </View>
@@ -934,34 +850,41 @@ function StudentShell({
       {updates.banner && screen !== "notifications" && (
         <View
           testID="floating-notification"
-          style={[s.banner, { bottom: 108 + insets.bottom }]}
+          pointerEvents="box-none"
+          style={{ position: "absolute", top: 12 + insets.top, width: "100%", maxWidth: studentContentWidth, alignSelf: "center", paddingHorizontal: 22, zIndex: 30 }}
         >
-          <Pressable style={{ flex: 1 }} onPress={openNotifications}>
-            <Text style={s.cardTitle}>{updates.banner.title}</Text>
-            <Text numberOfLines={2} style={s.muted}>
+        <View style={s.banner}
+        >
+          <Pressable accessibilityRole="button" accessibilityLabel="Open notification inbox" onPress={() => { updates.dismiss(); setScreen("notifications"); }} style={{ flex: 1 }}>
+            <Text style={[s.cardTitle, { color: "white" }]}>{updates.banner.title}</Text>
+            <Text numberOfLines={3} style={[s.muted, { color: "#eee8f7" }]}>
               {updates.banner.message}
             </Text>
           </Pressable>
           <Pressable
             accessibilityLabel="Dismiss notification"
+            accessibilityRole="button"
             onPress={updates.dismiss}
           >
             <Ionicons name="close" size={24} color="white" />
           </Pressable>
         </View>
+        </View>
       )}
 
-      <View
+      {screen !== "availability" && <View
         pointerEvents="box-none"
         style={[s.navPosition, { bottom: Math.max(insets.bottom, 12) }]}
       >
         <GlassTabBar activeTab={activeTab} onSelect={setScreen} />
-      </View>
+      </View>}
+      </SwipeBack>
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
+  calendarPage: { width: "100%", maxWidth: 1500, alignSelf: "center", paddingHorizontal: 16, paddingBottom: 24 },
   saveButton: {
     minHeight: 52,
     borderRadius: 18,
@@ -978,7 +901,7 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     width: "100%",
-    maxWidth: 700,
+    maxWidth: studentContentWidth,
     alignSelf: "center",
     paddingHorizontal: 22,
     paddingTop: 10,
@@ -1033,7 +956,7 @@ const s = StyleSheet.create({
     padding: 22,
     paddingTop: 20,
     paddingBottom: 24,
-    maxWidth: 700,
+    maxWidth: studentContentWidth,
     width: "100%",
     alignSelf: "center",
   },
@@ -1085,40 +1008,50 @@ const s = StyleSheet.create({
   course: {
     width: 278,
     borderRadius: 24,
-    padding: 20,
     overflow: "hidden",
-    gap: 10,
+    backgroundColor: "#252525",
   },
-  courseTop: {
+  courseArtwork: { aspectRatio: 4 / 5 },
+  courseArt: {
+    width: "100%",
+    height: "100%",
+  },
+  courseFooter: {
+    flex: 1,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  courseKicker: {
-    fontSize: 9,
-    letterSpacing: 1.6,
-    fontWeight: "800",
-    color: "#4f405e",
+  courseCopy: { flex: 1, gap: 3 },
+  courseAction: {
+    minHeight: 36,
+    minWidth: 64,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f5f3fa",
   },
-  courseArt: { height: 120, alignItems: "center", justifyContent: "center" },
-  orbit: {
-    position: "absolute",
-    width: 150,
-    height: 100,
-    borderRadius: 60,
-    borderWidth: 1,
-    borderColor: "#ffffff88",
-    transform: [{ rotate: "-25deg" }],
-    backgroundColor: "#ffffff20",
+  courseActionText: {
+    color: "#252033",
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "700",
+    textAlign: "center",
+    includeFontPadding: false,
   },
   courseTitle: {
-    fontSize: 26,
-    fontWeight: "700",
-    color: "#282033",
-    letterSpacing: -0.8,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: "600",
+    color: "#fff",
+    includeFontPadding: false,
   },
-  courseMeta: { color: "#51445f", fontSize: 12, lineHeight: 19 },
+  courseMeta: { color: "#e4ddec", fontSize: 12, lineHeight: 17 },
 
   lessonGroup: {
     backgroundColor: "#272727",
@@ -1151,7 +1084,7 @@ const s = StyleSheet.create({
     lineHeight: 21,
   },
 
-  readingCard: {
+  accountCard: {
     backgroundColor: "#272727",
     borderRadius: 22,
     padding: 16,
@@ -1159,43 +1092,13 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#393939",
   },
-  readingTop: { flexDirection: "row", alignItems: "center", gap: 12 },
-  readingIcon: {
-    width: 52,
-    height: 62,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  vocabulary: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    borderTopWidth: 1,
-    borderColor: "#393939",
-    marginTop: 16,
-    paddingTop: 14,
-  },
-  word: {
-    color: "#a49dff",
-    backgroundColor: "#2d263b",
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    fontSize: 11,
-    alignSelf: "flex-start",
-  },
-  definition: { color: "#b4adbf", fontSize: 12, maxWidth: 240, lineHeight: 18 },
-  passage: { color: "#d9d3e2", lineHeight: 25, fontSize: 14, paddingTop: 20 },
-
   legacy: { flex: 1, backgroundColor: "#191919" },
   utility: { padding: 18 },
-  placeholder: {
-    flex: 1,
-    justifyContent: "center",
+  loadingToday: {
+    flexDirection: "row",
     alignItems: "center",
-    gap: 16,
-    padding: 24,
+    gap: 10,
+    marginTop: 16,
   },
   profileTop: {
     flexDirection: "row",
@@ -1231,9 +1134,6 @@ const s = StyleSheet.create({
     marginBottom: 12,
   },
   banner: {
-    position: "absolute",
-    left: 20,
-    right: 20,
     padding: 18,
     borderRadius: 18,
     backgroundColor: "#30283f",

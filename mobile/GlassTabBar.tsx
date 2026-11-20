@@ -1,150 +1,186 @@
-import React, { useEffect, useRef, useState } from "react";
-import { AccessibilityInfo, Animated, PanResponder, Platform, StyleSheet, Text, View } from "react-native";
+import { SchoolIcon } from "./SchoolIcon";
+import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Animated, Easing, PanResponder, Platform, StyleSheet, View } from "react-native";
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
-import { GlassIcon as Ionicons, GlassPressable as Pressable } from "./GlassIcon";
+import { GlassPressable, useReducedMotion } from "./GlassIcon";
 
 const tabs = ["Today", "Lesson", "Profile"] as const;
-type Tab = typeof tabs[number];
-const icons = { Today: "home-outline", Lesson: "play-circle-outline", Practice: "game-controller-outline", Profile: "person-outline" } as const;
-const nativeDriver = Platform.OS !== "web";
+type Tab = (typeof tabs)[number];
+const inset = 7;
+const dragThreshold = 8;
+const isWeb = Platform.OS === "web";
+const labelColor = "#eeeef5";
+const selectedLabelColor = "#b5afff";
 
-export function GlassTabBar({ activeTab, onSelect }: { activeTab: string | null; onSelect: (tab: Tab) => void }) {
-  const [width, setWidth] = useState(0);
-  const [reduceMotion, setReduceMotion] = useState(true);
-  const position = useRef(new Animated.Value(0)).current;
-  const stretch = useRef(new Animated.Value(1)).current;
-  const press = useRef(new Animated.Value(0)).current;
-  const previousWidth = useRef(0);
+export function GlassTabBar({ activeTab, onSelect }: {
+  activeTab: string | null;
+  onSelect: (tab: Tab) => void;
+}) {
   const container = useRef<React.ComponentRef<typeof View>>(null);
-  const bounds = useRef({ x: 0, y: 0, height: 77 });
+  const bounds = useRef({ x: 0, y: 0, width: 0, height: 0 });
   const dragging = useRef(false);
-  const hovered = useRef(-1);
+  const suppressPointerClick = useRef(false);
+  const touchStart = useRef<{ id: number; tab: Tab; x: number; y: number } | null>(null);
   const [preview, setPreview] = useState<number | null>(null);
-  const index = tabs.findIndex(tab => tab === activeTab);
-  const tabWidth = Math.max(0, (width - 14) / tabs.length);
-  const nativeGlass = Platform.OS === "ios" && isLiquidGlassAvailable();
-  const visibleIndex = preview ?? index;
-  const touch = useRef({ x: 0, y: 0 });
+  const [width, setWidth] = useState(0);
+  const reducedMotion = useReducedMotion();
+  const activeIndex = tabs.findIndex(tab => tab === activeTab);
+  const [position] = useState(() => new Animated.Value(Math.max(0, activeIndex)));
+  const tabWidth = Math.max(0, (width - inset * 2) / tabs.length);
+  const translateX = useMemo(() => position.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, tabWidth],
+  }), [position, tabWidth]);
+  // The same value drives the highlight, icon tint, and label color during
+  // both a slide and a drag, including when a new tap interrupts the slide.
+  const tabMotion = useMemo(() => tabs.map((_, index) => {
+    const tint = position.interpolate({
+      inputRange: [index - 1, index, index + 1],
+      outputRange: [0, 1, 0],
+      extrapolate: "clamp",
+    });
+    return { tint, color: tint.interpolate({ inputRange: [0, 1], outputRange: [labelColor, selectedLabelColor] }) };
+  }), [position]);
+  const isPreviewing = preview !== null;
 
-  function track(x: number) {
-    if (!tabWidth) return;
-    const local = Math.max(0, Math.min(tabWidth * tabs.length - 1, x - bounds.current.x - 7));
-    hovered.current = Math.floor(local / tabWidth);
-    setPreview(hovered.current);
-    position.stopAnimation();
-    position.setValue(reduceMotion ? hovered.current * tabWidth : Math.max(0, Math.min((tabs.length - 1) * tabWidth, local - tabWidth / 2)));
-    stretch.stopAnimation();
-    stretch.setValue(reduceMotion ? 1 : 1.1);
-  }
-  function finish(commit: boolean) {
-    dragging.current = false;
-    const target = commit && hovered.current >= 0 ? hovered.current : index;
-    setPreview(null);
-    respondToPress(false);
-    if (target >= 0) {
-      if (reduceMotion) { position.setValue(target * tabWidth); stretch.setValue(1); }
-      else Animated.parallel([
-        Animated.spring(position, { toValue: target * tabWidth, damping: 19, stiffness: 210, useNativeDriver: nativeDriver }),
-        Animated.spring(stretch, { toValue: 1, damping: 13, stiffness: 240, useNativeDriver: nativeDriver }),
-      ]).start();
-      if (commit) onSelect(tabs[target]!);
+  useLayoutEffect(() => {
+    if (isPreviewing || activeIndex < 0) return;
+    if (reducedMotion) {
+      position.setValue(activeIndex);
+      return;
     }
-  }
-  // Keep the responder alive across preview renders. Recreating it resets the
-  // gesture's touch history while the finger is still down.
-  const gestureActions = useRef({
-    start: (_x: number, _y: number) => {},
-    move: (_x: number, _y: number) => {},
-    end: (_x: number, _y: number) => {},
-    cancel: () => {},
+    const slide = Animated.timing(position, {
+      toValue: activeIndex,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: !isWeb,
+      isInteraction: false,
+    });
+    // Let the browser finish the screen switch before starting the slide clock.
+    const frame = isWeb ? requestAnimationFrame(() => slide.start()) : undefined;
+    if (!isWeb) slide.start();
+    return () => {
+      if (frame !== undefined) cancelAnimationFrame(frame);
+      slide.stop();
+    };
+  }, [activeIndex, isPreviewing, position, reducedMotion]);
+
+  const actions = useRef({ move: (_x: number) => {}, end: (_x: number, _y: number) => {} });
+  const measure = () => container.current?.measureInWindow((x, y, width, height) => {
+    bounds.current = { x, y, width, height };
   });
-  gestureActions.current = {
-    start: (x, y) => {
-      dragging.current = true;
-      touch.current = { x, y };
-      respondToPress(true);
-      container.current?.measureInWindow((left, top, _width, height) => {
-        bounds.current = { x: left, y: top, height };
-        if (dragging.current) track(touch.current.x);
-      });
+  const positionAt = (x: number) => Math.max(0, Math.min(tabs.length - 1,
+    (x - bounds.current.x - inset) / ((bounds.current.width - inset * 2) / tabs.length) - 0.5));
+  actions.current = {
+    move: x => {
+      if (bounds.current.width <= inset * 2) return;
+      const next = positionAt(x);
+      const index = Math.round(next);
+      position.setValue(reducedMotion ? index : next);
+      setPreview(index);
     },
-    move: (x, y) => { touch.current = { x, y }; track(x); },
     end: (x, y) => {
-      track(x);
-      finish(y >= bounds.current.y - 36 && y <= bounds.current.y + bounds.current.height + 36 && x >= bounds.current.x - 24 && x <= bounds.current.x + width + 24);
+      const b = bounds.current;
+      dragging.current = false;
+      setPreview(null);
+      if (b.width > inset * 2 && x >= b.x - 24 && x <= b.x + b.width + 24 && y >= b.y - 36 && y <= b.y + b.height + 36) onSelect(tabs[Math.round(positionAt(x))]!);
     },
-    cancel: () => finish(false),
   };
-  const pan = useRef(PanResponder.create({
-    // Own the touch from the start, before child Pressables/native glass can
-    // claim a long press. Keyboard and screen-reader activation still use onPress.
-    onStartShouldSetPanResponderCapture: () => true,
-    onMoveShouldSetPanResponderCapture: () => true,
-    onPanResponderGrant: event => gestureActions.current.start(event.nativeEvent.pageX, event.nativeEvent.pageY),
-    onPanResponderMove: event => gestureActions.current.move(event.nativeEvent.pageX, event.nativeEvent.pageY),
-    onPanResponderRelease: event => gestureActions.current.end(event.nativeEvent.pageX, event.nativeEvent.pageY),
-    onPanResponderTerminate: () => gestureActions.current.cancel(),
-    onPanResponderTerminationRequest: () => false,
-  })).current;
-
-  useEffect(() => {
-    let alive = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then(value => { if (alive) setReduceMotion(value); });
-    const subscription = AccessibilityInfo.addEventListener("reduceMotionChanged", setReduceMotion);
-    return () => { alive = false; subscription.remove(); };
-  }, []);
-
-  useEffect(() => {
-    position.stopAnimation();
-    stretch.stopAnimation();
-    if (index < 0 || !width) return;
-    const destination = index * tabWidth;
-    // Snap initial layout / rotation; spring only between user selections.
-    if (reduceMotion || previousWidth.current !== width) {
-      position.setValue(destination);
-      stretch.setValue(1);
-    } else {
-      Animated.parallel([
-        Animated.spring(position, { toValue: destination, damping: 19, stiffness: 210, mass: 0.85, useNativeDriver: nativeDriver }),
-        Animated.sequence([
-          Animated.timing(stretch, { toValue: 1.12, duration: 110, useNativeDriver: nativeDriver }),
-          Animated.spring(stretch, { toValue: 1, damping: 13, stiffness: 240, useNativeDriver: nativeDriver }),
-        ]),
-      ]).start();
-    }
-    previousWidth.current = width;
-    return () => { position.stopAnimation(); stretch.stopAnimation(); };
-  }, [index, width, tabWidth, reduceMotion, position, stretch]);
-
-  useEffect(() => {
-    if (reduceMotion) { press.stopAnimation(); press.setValue(0); }
-    return () => press.stopAnimation();
-  }, [reduceMotion, press]);
-
-  function respondToPress(down: boolean) {
-    if (reduceMotion) return;
-    Animated.spring(press, { toValue: down ? 1 : 0, damping: 15, stiffness: 280, useNativeDriver: nativeDriver }).start();
-  }
-
-  return <Animated.View ref={container} {...pan.panHandlers} onTouchStart={() => container.current?.measureInWindow((x, y, _width, height) => { bounds.current = { x, y, height }; })} style={[s.container, Platform.OS === "web" && ({ touchAction: "none" } as any), { transform: [{ scale: press.interpolate({ inputRange: [0, 1], outputRange: [1, 0.985] }) }] }]}>
-    <GlassView isInteractive={false} glassEffectStyle="regular" colorScheme="dark" onLayout={event => setWidth(event.nativeEvent.layout.width)} style={[s.glass, !nativeGlass && s.fallback, Platform.OS === "web" && ({ backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" } as any)]}>
-      {width > 0 && visibleIndex >= 0 && <Animated.View testID="glass-selection" pointerEvents="none" style={[s.selection, { width: tabWidth, transform: [{ translateX: position }, { scaleX: stretch }, { scaleY: press.interpolate({ inputRange: [0, 1], outputRange: [1, 0.94] }) }] }]}>
-      </Animated.View>}
-      {tabs.map((tab, tabIndex) => <Pressable key={tab} accessibilityRole="tab" accessibilityLabel={tab} accessibilityState={{ selected: activeTab === tab }} onPress={() => { if (dragging.current) finish(true); else onSelect(tab); }} onPressIn={() => { container.current?.measureInWindow((x, y, _width, height) => { bounds.current = { x, y, height }; }); respondToPress(true); }} onPressOut={() => { if (!dragging.current) respondToPress(false); }} style={s.tab}>
-        <Ionicons name={visibleIndex === tabIndex && tab === "Today" ? "home" : icons[tab]} size={25} color={visibleIndex === tabIndex ? "#b5afff" : "#eeeef5"} />
-        <Text style={[s.label, visibleIndex === tabIndex && s.selectedLabel]}>{tab}</Text>
-      </Pressable>)}
+  const [pan] = useState(() => PanResponder.create({
+    onStartShouldSetPanResponderCapture: () => false,
+    onMoveShouldSetPanResponderCapture: (_event, gesture) =>
+      Math.abs(gesture.dx) > dragThreshold && Math.abs(gesture.dx) > Math.abs(gesture.dy),
+    onPanResponderGrant: event => {
+      dragging.current = true;
+      suppressPointerClick.current = true;
+      actions.current.move(event.nativeEvent.pageX);
+    },
+    onPanResponderMove: event => actions.current.move(event.nativeEvent.pageX),
+    onPanResponderRelease: event => actions.current.end(event.nativeEvent.pageX, event.nativeEvent.pageY),
+    onPanResponderTerminate: () => { dragging.current = false; setPreview(null); },
+    onPanResponderTerminationRequest: () => true,
+  }));
+  const nativeGlass = Platform.OS === "ios" && isLiquidGlassAvailable();
+  const selectedIndex = preview ?? activeIndex;
+  // Ignore the click from a drag without blocking a new press during settling.
+  return <View ref={container} {...pan.panHandlers}
+    onClickCapture={undefined}
+    onPointerDown={isWeb ? () => { suppressPointerClick.current = false; } : undefined}
+    onLayout={event => { setWidth(event.nativeEvent.layout.width); measure(); }} onTouchStart={measure}
+    style={[s.container, Platform.OS === "web" && ({ touchAction: "pan-y" } as any)]}>
+    <GlassView isInteractive={false} glassEffectStyle="regular" colorScheme="dark"
+      style={[s.glass, !nativeGlass && s.fallback, Platform.OS === "web" && ({ backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" } as any)]}>
+      {tabWidth > 0 && <Animated.View testID="glass-selection" pointerEvents="none"
+        style={[s.selection, { width: tabWidth, opacity: selectedIndex < 0 ? 0 : 1, transform: [{ translateX }] }]} />}
+      {tabs.map((tab, index) => <GlassPressable key={tab} accessibilityRole="tab" accessibilityLabel={tab}
+        aria-selected={activeTab === tab} completePressFeedback onPressIn={measure}
+        onKeyDownCapture={isWeb ? event => {
+          const { key, repeat } = event.nativeEvent;
+          if (key !== "Enter" && key !== " ") return;
+          event.preventDefault();
+          event.stopPropagation();
+          if (!repeat) onSelect(tab);
+        } : undefined}
+        onPointerDown={isWeb ? ({ nativeEvent: event }) => {
+          if (event.pointerType === "touch" && event.isPrimary) {
+            touchStart.current = { id: event.pointerId, tab, x: event.pageX, y: event.pageY };
+          }
+        } : undefined}
+        onPointerCancel={isWeb ? ({ nativeEvent: event }) => {
+          if (touchStart.current?.id === event.pointerId) touchStart.current = null;
+        } : undefined}
+        onPointerUp={isWeb ? ({ nativeEvent: event }) => {
+          const start = touchStart.current;
+          if (event.pointerType !== "touch" || start?.id !== event.pointerId) return;
+          touchStart.current = null;
+          // A browser can omit the compatibility click after a touch swipe.
+          // Activate a valid tap on release and ignore any duplicate click.
+          suppressPointerClick.current = true;
+          if (!dragging.current && start.tab === tab &&
+            Math.hypot(event.pageX - start.x, event.pageY - start.y) <= dragThreshold) onSelect(tab);
+        } : undefined}
+        onPress={event => {
+          const pointerClick = isWeb && "detail" in event.nativeEvent && event.nativeEvent.detail !== 0;
+          if (!dragging.current && !(pointerClick && suppressPointerClick.current)) onSelect(tab);
+        }} style={s.tab}>
+        <SchoolIcon name={tab === "Today" ? "home" : tab === "Lesson" ? "lesson" : "profile"} selected={selectedIndex === index}
+          selectionProgress={selectedIndex < 0 ? undefined : tabMotion[index]!.tint} size={30} />
+        <Animated.Text style={[s.label, selectedIndex >= 0 && { color: tabMotion[index]!.color }]}>{tab}</Animated.Text>
+      </GlassPressable>)}
     </GlassView>
-  </Animated.View>;
+  </View>;
 }
 
 const s = StyleSheet.create({
   container: { width: "100%", maxWidth: 560 },
-  glass: { flexDirection: "row", borderRadius: 42, padding: 6, borderWidth: 1, borderColor: "#ffffff28", overflow: "hidden", boxShadow: "0 8px 32px #00000055" },
+  glass: {
+    flexDirection: "row",
+    borderRadius: 42,
+    padding: 6,
+    borderWidth: 1,
+    borderColor: "#ffffff28",
+    overflow: "hidden",
+    boxShadow: "0 8px 32px #00000055",
+  },
   fallback: { backgroundColor: "rgba(28, 28, 28, 0.92)" },
-  selection: { position: "absolute", top: 6, bottom: 6, left: 6, borderRadius: 34, backgroundColor: "#8178ff24", borderWidth: 1, borderColor: "#ffffff30", overflow: "hidden" },
-  tab: { flex: 1, alignItems: "center", justifyContent: "center", gap: 4, minHeight: 63, borderRadius: 34 },
-  label: { fontSize: 11, fontWeight: "600", color: "#eeeef5" },
-  selectedLabel: { color: "#b5afff" },
+  selection: {
+    position: "absolute",
+    top: inset - 1,
+    bottom: inset - 1,
+    left: inset - 1,
+    borderRadius: 34,
+    backgroundColor: "#8178ff24",
+    borderWidth: 1,
+    borderColor: "#ffffff30",
+    overflow: "hidden",
+  },
+  tab: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    minHeight: 63,
+    borderRadius: 34,
+  },
+  label: { fontSize: 11, fontWeight: "600", color: labelColor },
 });
-

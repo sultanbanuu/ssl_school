@@ -40,11 +40,11 @@ export function performanceRoutes(db: PrismaClient, actorFor: (request: Request)
     }, { params: idParams, body: z.object({ level: z.enum(levels).nullable() }).strict() })
     .get("/api/performance/students/:id/lessons", async ({ request, params }) => {
       const id = teacherId(await actorFor(request));
-      return db.lesson.findMany({ where: { teacherId: id, enrollment: { studentId: params.id, teacherId: id }, status: { in: ["scheduled", "completed"] } }, select: { id: true, date: true, enrollment: { select: { course: { select: { name: true } } } } }, orderBy: { date: "desc" } });
+      return db.lesson.findMany({ where: { teacherId: id, enrollment: { studentId: params.id }, status: { in: ["scheduled", "completed"] } }, select: { id: true, date: true, enrollment: { select: { course: { select: { name: true } } } } }, orderBy: { date: "desc" } });
     }, { params: idParams })
     .put("/api/performance/lessons/:id", async ({ request, params, body }) => {
       const id = teacherId(await actorFor(request));
-      const lesson = await db.lesson.findFirst({ where: { id: params.id, teacherId: id, enrollment: { teacherId: id }, status: { in: ["scheduled", "completed"] } }, select: { enrollment: { select: { studentId: true } } } });
+      const lesson = await db.lesson.findFirst({ where: { id: params.id, teacherId: id, status: { in: ["scheduled", "completed"] } }, select: { enrollment: { select: { studentId: true } } } });
       if (!lesson) throw new HttpError(404, "Lesson not found");
       // One current evaluation per lesson. Edits retain its weight snapshot unless explicitly changed.
       const existing = await db.lessonEvaluation.findUnique({ where: { lessonId: params.id }, select: { teacherId: true } });

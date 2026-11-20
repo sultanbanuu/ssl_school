@@ -14,6 +14,7 @@ export function createCourseService(db: PrismaClient) {
     ) {
       const records = await db.course.findMany({
         where: courseScope(actor),
+        include: { teachers: { include: { teacher: { select: { profile: { select: { firstName: true, lastName: true } } } } } } },
         take: query.limit,
         skip: query.offset,
         orderBy: [{ createdAt: "desc" }, { id: "asc" }],
@@ -30,9 +31,11 @@ export function createCourseService(db: PrismaClient) {
       body: z.output<typeof createCourseBody>,
     ) {
       requireStaff(actor);
+      const { teachers, ...details } = body;
       const course = await db.course.create({
         data: {
-          ...body,
+          ...details,
+          teachers: { create: teachers ?? [{ teacherId: body.teacherId }] },
           duration:
             body.duration === undefined ? undefined : BigInt(body.duration),
         },

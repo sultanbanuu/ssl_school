@@ -63,7 +63,7 @@ try {
       await page.getByRole("button", { name: "This month", exact: true }).waitFor();
       assert.equal(await page.getByRole("button", { name: "Analytics", exact: true }).count(), 0);
     } else await page.getByRole("button", { name: "Analytics / Performance", exact: true }).click();
-    await page.getByText(role === "admin" ? "Set the standard." : role === "teacher" ? "A clear view of every learner." : "Your learning, in focus.", { exact: true }).waitFor();
+    await page.getByText(role === "admin" ? "Student management" : role === "teacher" ? "Your classes" : "Your learning, in focus.", { exact: true }).waitFor();
     const noOverflow = async () => assert(await page.evaluate(() => [...document.querySelectorAll('input, [role="button"]')].filter(e => { const r = e.getBoundingClientRect(); return r.width && r.height; }).every(e => { const r = e.getBoundingClientRect(); return r.left >= -1 && r.right <= innerWidth + 1; })), "Mobile controls must fit viewport");
     await noOverflow();
     await page.screenshot({ path: path.join(output, `performance-${role}-mobile.png`) });
@@ -112,7 +112,7 @@ try {
       await page.getByText("Updated teacher feedback", { exact: true }).first().waitFor({ timeout: 25000 });
       await page.getByRole("button", { name: "This month", exact: true }).click();
       await page.getByRole("button", { name: "How scoring works ↗", exact: true }).click();
-      await page.getByText("Assessment principles", { exact: true }).waitFor();
+      await page.getByText("Your teacher scores your work in four areas:", { exact: true }).waitFor();
       await page.setViewportSize({ width: 1024, height: 900 });
       await page.screenshot({ path: path.join(output, "performance-student-desktop.png") });
       data.evaluations.splice(0); data.enrollments.splice(0);

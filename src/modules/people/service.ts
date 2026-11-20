@@ -2,6 +2,7 @@ import type { z } from "zod";
 import { provisionAccount } from "../../accounts";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 import {
+  enrollmentScope,
   HttpError,
   requireAdmin,
   requireStaff,
@@ -28,7 +29,7 @@ function studentScope(actor: Actor): Prisma.StudentWhereInput {
   if (actor.role === "teacher") {
     if (!actor.teacherId)
       throw new HttpError(403, "Teacher account is incomplete");
-    return { enrollments: { some: { teacherId: actor.teacherId } } };
+    return { enrollments: { some: enrollmentScope(actor) } };
   }
   return {};
 }
@@ -71,7 +72,15 @@ export function createPeopleService(db: PrismaClient) {
         select: {
           id: true,
           status: true,
-          profile: { select: { firstName: true, lastName: true } },
+          profile: {
+            select: {
+              firstName: true,
+              lastName: true,
+              user: actor.role === "admin"
+                ? { select: { email: true, emailVerified: true } }
+                : false,
+            },
+          },
         },
       });
     },

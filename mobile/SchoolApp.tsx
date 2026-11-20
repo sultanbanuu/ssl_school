@@ -1,3 +1,5 @@
+import { BackIcon } from "./CourseIcon";
+import { studentContentWidth } from "./student-layout";
 import { StatusBadge } from "./StatusBadge";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -35,8 +37,6 @@ import { Availability } from "./Availability";
 import { Notifications } from "./src/Notifications";
 import { AuditHistory } from "./src/AuditHistory";
 import { useNotificationUpdates } from "./src/useNotificationUpdates";
-import { StudentApp } from "./StudentApp";
-import { enableDevicePush } from "./src/devicePush";
 import { RescheduleReview } from "./RescheduleReview";
 
 type Route =
@@ -117,18 +117,32 @@ function Notice({ text }: { text: string }) {
   ) : null;
 }
 
-export function SchoolApp(props: React.ComponentProps<typeof StaffSchoolApp>) {
-  useEffect(() => {
-    if (props.profile.role !== "student") return;
-    const register = () => { void enableDevicePush(false).catch(() => {}); };
-    register();
-    const subscription = AppState.addEventListener("change", state => { if (state === "active") register(); });
-    return () => subscription.remove();
-  }, [props.profile.id, props.profile.role]);
-  return props.profile.role === "student" ? <StudentApp {...props} /> : <StaffSchoolApp {...props} />;
+function StaffNavButton({ label, selected, count, onPress }: {
+  label: string;
+  selected: boolean;
+  count?: number;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={count === undefined ? undefined : `${count} unread notifications`}
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      style={({ pressed }) => [s.navButton, selected && s.navActive, pressed && { opacity: 0.6 }]}
+    >
+      <Text style={s.navText}>{label}</Text>
+      {!!count && (
+        <View testID="notification-badge" style={s.notificationBadge}>
+          <Text style={s.notificationBadgeText}>{count > 99 ? "99+" : count}</Text>
+        </View>
+      )}
+    </Pressable>
+  );
 }
 
-function StaffSchoolApp({
+export function StaffSchoolApp({
   profile,
   onSignOut,
   busy: signingOut,
@@ -165,90 +179,41 @@ function StaffSchoolApp({
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
           <View style={s.header}>
-            <View style={s.brand}>
-              <View style={s.logo}>
-                <Text style={s.logoText}>S</Text>
-              </View>
-              <View>
-                <Text style={s.brandName}>SSL SCHOOL</Text>
-                <Text style={s.small}>A little progress, every day.</Text>
-              </View>
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              disabled={signingOut}
-              onPress={() => void onSignOut()}
-            >
-              <Text style={s.link}>
-                {signingOut ? "Signing out…" : "Sign out"}
-              </Text>
-            </Pressable>
-          </View>
-          {profile && (
-            <View
-              style={[
-                s.row,
-                {
-                  paddingHorizontal: 16,
-                  paddingTop: 12,
-                  flexWrap: "wrap",
-                  gap: 12,
-                },
-              ]}
-            >
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => setRoute({ name: "lessons" })}
-              >
-                <Text style={s.link}>Lessons</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ selected: route.name === "availability" }}
-                onPress={() => setRoute({ name: "availability" })}
-                style={{ minHeight: 44, justifyContent: "center" }}
-              >
-                <Text
-                  style={[
-                    s.link,
-                    route.name === "availability" && {
-                      textDecorationLine: "underline",
-                    },
-                  ]}
-                >
-                  Teacher Availability
-                </Text>
-              </Pressable>
-              <Pressable accessibilityRole="button" onPress={goHome}>
-                <Text style={s.link}>Payments</Text>
-              </Pressable>
-              <Pressable accessibilityRole="button" onPress={() => setRoute({ name: "performance" })} style={{ minHeight: 44, justifyContent: "center" }}>
-                <Text style={s.link}>Analytics / Performance</Text>
-              </Pressable>
-              {profile.role === "admin" && <Pressable accessibilityRole="button" onPress={() => setRoute({ name: "audit" })} style={{ minHeight: 44, justifyContent: "center" }}><Text style={s.link}>Audit history</Text></Pressable>}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Notifications"
-                accessibilityHint={`${notificationUpdates.count} unread notifications`}
+            <Image
+              source={require("./assets/brand/logo.png")}
+              style={s.logo}
+              accessibilityLabel="SSL School"
+              accessible
+            />
+            <ScrollView horizontal style={s.navScroll} contentContainerStyle={s.navLinks} keyboardShouldPersistTaps="handled">
+              <StaffNavButton label="Lessons" selected={route.name === "lessons"} onPress={() => setRoute({ name: "lessons" })} />
+              <StaffNavButton label="Teacher Availability" selected={route.name === "availability"} onPress={() => setRoute({ name: "availability" })} />
+              {profile.role === "admin" && (
+                <StaffNavButton label="Payments" selected={["history", "new", "detail"].includes(route.name)} onPress={goHome} />
+              )}
+              <StaffNavButton label="Analytics / Performance" selected={route.name === "performance"} onPress={() => setRoute({ name: "performance" })} />
+              {profile.role === "admin" && (
+                <StaffNavButton label="Audit history" selected={route.name === "audit"} onPress={() => setRoute({ name: "audit" })} />
+              )}
+              <StaffNavButton
+                label="Notifications"
+                selected={route.name === "notifications"}
+                count={notificationUpdates.count}
                 onPress={() => {
                   notificationUpdates.dismiss();
                   setRoute({ name: "notifications" });
                 }}
-                style={{ position: "relative", paddingRight: 10 }}
-              >
-                <Text style={s.link}>Notifications</Text>
-                {notificationUpdates.count > 0 && (
-                  <View testID="notification-badge" style={s.notificationBadge}>
-                    <Text style={s.notificationBadgeText}>
-                      {notificationUpdates.count > 99
-                        ? "99+"
-                        : notificationUpdates.count}
-                    </Text>
-                  </View>
-                )}
-              </Pressable>
-            </View>
-          )}
+              />
+            </ScrollView>
+            <Pressable
+              accessibilityRole="button"
+              disabled={signingOut}
+              onPress={() => void onSignOut()}
+              style={({ pressed }) => [s.navButton, s.signOut, (pressed || signingOut) && { opacity: 0.6 }]}
+            >
+              <Text style={s.navText}>{signingOut ? "Signing out…" : "Sign out"}</Text>
+            </Pressable>
+          </View>
           <Notice text={error} />
           {route.name === "audit" ? (profile.role === "admin" ? <AuditHistory /> : <Notice text="Admin access required." />) : route.name === "performance" ? <Performance profile={profile} onFailure={onFailure} /> : route.name === "availability" ? (
             <ScrollView
@@ -299,7 +264,7 @@ function StaffSchoolApp({
                 onPress={goHome}
                 style={s.back}
               >
-                <Text style={s.link}>‹ Back to payments</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}><BackIcon /><Text style={s.link}>Back to payments</Text></View>
               </Pressable>
               {route.name === "new" ? (
                 <NewPayment done={(id) => setRoute({ name: "detail", id })} />
@@ -313,27 +278,20 @@ function StaffSchoolApp({
             route.name !== "notifications" && (
               <View
                 accessibilityLiveRegion="polite"
-                style={s.floatingNotification}
+                pointerEvents="box-none"
+                style={{ position: "absolute", top: 12, width: "100%", maxWidth: studentContentWidth, alignSelf: "center", paddingHorizontal: 22, zIndex: 20 }}
                 testID="floating-notification"
               >
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Open new notification"
-                  style={{ flex: 1, gap: 5 }}
-                  onPress={() => {
-                    notificationUpdates.dismiss();
-                    setRoute({ name: "notifications" });
-                  }}
-                >
+                <View style={s.floatingNotification}>
+                <ScrollView style={{ flex: 1, maxHeight: 260 }} contentContainerStyle={{ gap: 5 }}>
                   <Text style={s.floatingLabel}>NEW SCHOOL UPDATE</Text>
-                  <Text numberOfLines={1} style={s.floatingTitle}>
+                  <Text style={s.floatingTitle}>
                     {notificationUpdates.banner.title}
                   </Text>
-                  <Text numberOfLines={2} style={s.floatingBody}>
+                  <Text style={s.floatingBody}>
                     {notificationUpdates.banner.message}
                   </Text>
-                  <Text style={s.floatingLabel}>View notifications →</Text>
-                </Pressable>
+                </ScrollView>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Dismiss notification"
@@ -342,6 +300,7 @@ function StaffSchoolApp({
                 >
                   <Text style={s.floatingTitle}>×</Text>
                 </Pressable>
+                </View>
               </View>
             )}
         </KeyboardAvoidingView>
@@ -438,17 +397,7 @@ export function History({
         />
       }
     >
-      <Text style={s.eyebrow}>
-        {profile.role === "admin"
-          ? "SCHOOL ADMINISTRATION"
-          : `HELLO${profile.firstName ? `, ${profile.firstName.toUpperCase()}` : ""}`}
-      </Text>
       <Text style={s.title}>Payments</Text>
-      <Text style={s.muted}>
-        {profile.role === "admin"
-          ? "Review receipts. Keep learning moving."
-          : "Your learning, all taken care of."}
-      </Text>
       {profile.role === "student" && (
         <View style={s.hero}>
           <Text style={s.heroLabel}>ONE MONTH. MORE POSSIBILITIES.</Text>
@@ -468,11 +417,9 @@ export function History({
           <Text style={s.link}>Refresh</Text>
         </Pressable>
       </View>
-      <Text style={s.small}>
-        {profile.role === "student"
-          ? "Your submissions from the last six months"
-          : "Only an explicit decision changes payment status"}
-      </Text>
+      {profile.role === "student" && (
+        <Text style={s.small}>Your submissions from the last six months</Text>
+      )}
       <Notice text={error} />
       {loading && !items.length ? (
         <ActivityIndicator color="#255d47" />
@@ -668,7 +615,7 @@ export function NewPayment({ done }: { done: (id: string) => void }) {
               <Text style={s.course}>{c.name}</Text>
               <Text style={s.amount}>{money(c.monthlyPrice)}</Text>
             </View>
-            <Text style={s.small}>
+            <Text style={[s.small, course?.courseId === c.courseId && { color: "#f5f5f3" }]}>
               One calendar month{" "}
               {course?.courseId === c.courseId ? " • Selected" : ""}
             </Text>
@@ -979,9 +926,6 @@ export function Detail({ id, admin }: { id: string; admin: boolean }) {
 
 const s = StyleSheet.create({
   notificationBadge: {
-    position: "absolute",
-    top: -9,
-    right: -8,
     backgroundColor: "#7064ed",
     borderRadius: 12,
     minWidth: 22,
@@ -992,12 +936,6 @@ const s = StyleSheet.create({
   },
   notificationBadgeText: { color: "#f5f5f3", fontSize: 11, fontWeight: "800" },
   floatingNotification: {
-    position: "absolute",
-    top: 12,
-    left: 16,
-    right: 16,
-    maxWidth: 620,
-    alignSelf: "center",
     backgroundColor: "#7064ed",
     borderRadius: 18,
     padding: 18,
@@ -1017,35 +955,27 @@ const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#191919" },
   loading: { flex: 1 },
   header: {
-    padding: 22,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderBottomWidth: 1,
     borderColor: "#3d3d3d",
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    gap: 8,
   },
-  brand: { flexDirection: "row", alignItems: "center", gap: 10 },
-  logo: {
-    width: 38,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: "#7064ed",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  logoText: { color: "#f5f5f3", fontSize: 27, fontWeight: "800" },
-  brandName: {
-    fontSize: 13,
-    fontWeight: "800",
-    letterSpacing: 2,
-    color: "#f5f5f3",
-  },
+  navScroll: { flex: 1, minWidth: 0 },
+  navLinks: { alignItems: "center", gap: 4 },
+  navButton: { minHeight: 44, paddingHorizontal: 9, borderRadius: 9, flexDirection: "row", alignItems: "center", gap: 5 },
+  navText: { color: "#f5f5f3", fontWeight: "700", fontSize: 13 },
+  navActive: { backgroundColor: "#37324f" },
+  signOut: { borderWidth: 1, borderColor: "#57515f" },
+  logo: { width: 48, height: 48 },
   content: {
     padding: 22,
     gap: 18,
     paddingBottom: 48,
     width: "100%",
-    maxWidth: 700,
+    maxWidth: studentContentWidth,
     alignSelf: "center",
   },
   back: { paddingHorizontal: 24, paddingTop: 18 },
@@ -1101,9 +1031,8 @@ const s = StyleSheet.create({
     gap: 14,
   },
   selected: {
-    borderColor: "#3d3d3d",
-    backgroundColor: "#272727",
-    borderWidth: 2,
+    borderColor: "#7064ed",
+    backgroundColor: "#7064ed",
   },
   row: {
     flexDirection: "row",

@@ -19,3 +19,11 @@ test("public signup rejects short passwords before any database write", async ()
     expect((await response.json()).code).toBe("PASSWORD_TOO_SHORT");
   } finally { await db.$disconnect(); }
 });
+
+
+test("birth dates require dashes and a real calendar date", async () => {
+  const { birthDateSchema } = await import("../src/modules/auth/schemas");
+  for (const value of ["20000101", "2000/01/01", "2000-1-01", "2001-02-29", "2000-13-01", "2999-01-01"])
+    expect(birthDateSchema.safeParse(value).success).toBe(false);
+  expect(birthDateSchema.safeParse("2000-02-29").success).toBe(true);
+});

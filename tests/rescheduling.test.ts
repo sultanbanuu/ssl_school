@@ -21,7 +21,7 @@ function matches(row: any, where: any): boolean {
   });
 }
 function fixture() {
-  const enrollment = { studentId: "student", courseId: "course", student: { profileId: student.id, status: "active" }, course: { name: "English" } };
+  const enrollment = { studentId: "student", courseId: "course", student: { profileId: student.id, profile: { firstName: "Aysel", lastName: "Aliyeva" }, status: "active" }, course: { name: "English" } };
   const lessons: any[] = [{ id: "lesson", teacherId: "teacher", enrollment, ...dates({ date: "2099-11-02", startTime: "10:00", endTime: "11:00" }), status: "scheduled", allDay: false, reminderMinutes: 10, teacher: { profileId: teacher.id } }];
   const slots: any[] = [{ id: "slot", purpose: "reschedule", teacherId: "teacher", courseId: "course", startsAt: new Date("2099-11-04T12:00:00+04:00"), endsAt: new Date("2099-11-04T14:00:00+04:00"), active: true }];
   const requests: any[] = [], notifications: any[] = [];
@@ -73,6 +73,10 @@ test("request preserves original booking; assigned teacher approval moves one le
   expect(options.items.length).toBeGreaterThan(0); expect(options.quota.remaining).toBe(3);
   expect(options.lessonMinutes).toBe(60);
   const r = await f.s.request(student, "lesson", "slot");
+  expect(f.notifications.find(n => n.userId === teacher.id)?.message).toContain("Aysel Aliyeva");
+  expect(f.notifications.find(n => n.userId === teacher.id)?.title).toBe("Rescheduling request: Aysel Aliyeva");
+  expect(f.notifications[0].message).toContain("Original: 2099-11-02 · 10:00–11:00 (Asia/Baku)");
+  expect(f.notifications[0].message).toContain("Requested: 2099-11-04 · 12:00–13:00 (Asia/Baku)");
   expect(serialize(f.lessons[0]).date).toBe("2099-11-02");
   await f.s.review(teacher, r.id, "approved");
   expect(serialize(f.lessons[0]).date).toBe("2099-11-04");
@@ -80,6 +84,7 @@ test("request preserves original booking; assigned teacher approval moves one le
   expect(f.lessons[0].status).toBe("scheduled"); expect(f.lessons[0].rescheduledAt).toBeInstanceOf(Date);
   expect(f.lessons[0].reminderAt.toISOString()).toBe("2099-11-04T07:50:00.000Z");
   expect(f.notifications.some(n => n.userId === student.id && n.title === "Rescheduling approved")).toBe(true);
+  expect(f.notifications.find(n => n.userId === teacher.id && n.title.startsWith("Rescheduling approved"))?.message).toContain("Confirmed: 2099-11-04 · 12:00–13:00 (Asia/Baku)");
   await expect(f.s.review(teacher, r.id, "approved")).rejects.toThrow("already been reviewed");
 });
 test("three submitted requests limit applies to rejected requests; admin waiver restores access; cancellation is unrestricted", async () => {
@@ -92,9 +97,12 @@ test("three submitted requests limit applies to rejected requests; admin waiver 
   await f.s.request(student, "lesson", "slot");
   await f.s.cancel(student, "lesson");
   expect(f.lessons[0].status).toBe("cancelled"); expect(f.requests[3].status).toBe("cancelled");
+  expect(f.notifications.find(n => n.userId === teacher.id && n.title.startsWith("Lesson cancelled"))?.title).toBe("Lesson cancelled by student: Aysel Aliyeva");
+  expect(f.notifications.find(n => n.userId === teacher.id && n.title.startsWith("Lesson cancelled"))?.message).toContain("10:00–11:00 (Asia/Baku)");
   await f.s.cancel(student, "lesson"); // Idempotent, no quota needed.
   await expect(f.s.restore(teacher, "lesson")).rejects.toThrow("Admin access");
   await f.s.restore(admin, "lesson"); expect(f.lessons[0].status).toBe("scheduled");
+  expect(f.notifications.find(n => n.userId === teacher.id && n.title.startsWith("Lesson restored"))?.message).toContain("Aysel Aliyeva · English · 2099-11-02 · 10:00–11:00 (Asia/Baku)");
   await f.s.cancel(student, "lesson"); expect(f.lessons[0].status).toBe("cancelled");
 });
 test("ownership, assigned teacher, and manager restrictions protect requests", async () => {

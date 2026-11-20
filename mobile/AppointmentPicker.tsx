@@ -57,10 +57,17 @@ export function AppointmentPicker({
     date.setUTCMonth(date.getUTCMonth() + delta);
     pick(date.toISOString().slice(0, 10));
   };
-  const forDay = (date: string) =>
-    slots
-      .filter((slot) => civil(slot.startsAt).slice(0, 10) === date)
-      .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  const slotsByDay = new Map<string, AvailabilitySlot[]>();
+  for (const slot of slots) {
+    const date = civil(slot.startsAt).slice(0, 10);
+    const day = slotsByDay.get(date) || [];
+    day.push(slot);
+    slotsByDay.set(date, day);
+  }
+  for (const day of slotsByDay.values()) {
+    day.sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  }
+  const forDay = (date: string) => slotsByDay.get(date) || [];
   const arrow = (title: string, text: string, action: () => void) => (
     <Pressable
       accessibilityRole="button"

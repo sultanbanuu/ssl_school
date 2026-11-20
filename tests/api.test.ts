@@ -34,7 +34,7 @@ describe("API authorization and validation", () => {
   test("teachers query only their assigned enrollments", async () => {
     const { app, calls } = fixture("teacher");
     expect((await app.handle(request("/api/enrollments"))).status).toBe(200);
-    expect(calls[0].args.where).toEqual({ teacherId });
+    expect(calls[0].args.where).toEqual({ OR: [{ teacherId }, { course: { OR: [{ teacherId }, { teachers: { some: { teacherId } } }] } }, { lessons: { some: { teacherId, status: { in: ["scheduled", "completed"] } } } }] });
   });
   test("incomplete student records fail closed", async () => {
     const { app, calls } = fixture("student", false);

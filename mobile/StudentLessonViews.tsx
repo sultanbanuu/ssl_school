@@ -1,3 +1,5 @@
+import { BackIcon } from "./CourseIcon";
+import { studentContentWidth } from "./student-layout";
 import { LessonBadge } from "./StatusBadge";
 import React, { useRef, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -45,7 +47,7 @@ export function StudentLessonViews({ lessons, loading, error, refresh }: { lesso
           <View style={s.row}><Text style={s.muted}>{dateLabel(lesson)}</Text><Status lesson={lesson} /></View>
           <Text style={s.time}>{timeLabel(lesson)}</Text>
           <Text style={s.course}>{lesson.enrollment.course.name}</Text>
-          <Text style={s.muted}>{duration(lesson)} · Baku time</Text>
+          <Text style={s.muted}>{duration(lesson)}</Text>
           <View style={s.teacherRow}><View style={s.initial}><Text style={s.accent}>{teacherName(lesson).charAt(0)}</Text></View><Text style={[s.muted, { flex: 1 }]}>Teacher: {teacherName(lesson)}</Text><GlassIcon name="chevron-forward" size={18} color="#a49dff" /></View>
         </Pressable>
       </View>;
@@ -56,13 +58,12 @@ export function StudentLessonViews({ lessons, loading, error, refresh }: { lesso
     {loading && <ActivityIndicator accessibilityLabel="Loading lessons" color="#a49dff" />}
     {!!error && <Pressable accessibilityRole="button" onPress={refresh}><Text accessibilityRole="alert" style={s.error}>{error} Tap to retry.</Text></Pressable>}
     {section === "Lessons" ? <>
-      <View style={s.titleRow}><View style={{ flex: 1 }}><Text style={s.eyebrow}>YOUR LEARNING</Text><Text accessibilityRole="header" style={s.title}>Your lessons</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Refresh lessons" onPress={refresh} style={s.refresh}><GlassIcon name="refresh-outline" size={20} color="#a49dff" /></Pressable></View>
-      <Text style={s.subtitle}>A little practice. Real progress.</Text>
+      <View style={s.titleRow}><View style={{ flex: 1 }}><Text accessibilityRole="header" style={s.title}>Your lessons</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Refresh lessons" onPress={refresh} style={s.refresh}><GlassIcon name="refresh-outline" size={20} color="#a49dff" /></Pressable></View>
       {!loading && !error && !lessons.length && <View style={s.card}><Text style={s.course}>No lessons available yet</Text><Text style={s.muted}>Your scheduled lessons will appear here once your school confirms them.</Text></View>}
       {next.length > 0 && <Text style={s.subheading}>Your next {next.length === 1 ? "lesson" : "lessons"}</Text>}
       {cards(next)}
       {previous.length > 0 && <Pressable accessibilityRole="button" accessibilityState={{ expanded: showHistory }} onPress={() => setShowHistory(!showHistory)} style={s.back}><Text style={s.link}>{showHistory ? "Hide lesson history" : "Show lesson history"}</Text></Pressable>}{showHistory && cards(previous)}
-    </> : !selected ? <View style={s.card}><Text style={s.course}>This lesson is no longer available</Text><Pressable onPress={() => changeSection("Lessons")}><Text style={s.link}>Back to lessons</Text></Pressable></View> : section === "Lesson details" ? <>
+    </> : !selected ? <View style={s.card}><Text style={s.course}>This lesson is no longer available</Text><Pressable onPress={() => changeSection("Lessons")}><View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}><BackIcon /><Text style={s.link}>Back to lessons</Text></View></Pressable></View> : section === "Lesson details" ? <>
       <Text style={s.eyebrow}>LESSON DETAILS</Text><Text accessibilityRole="header" style={s.title}>{selected.enrollment.course.name}</Text><Text style={s.subtitle}>{duration(selected)} · With {teacherName(selected)}</Text>
       <View style={s.detailCard}>
         <View style={s.detailRow}><Text style={s.muted}>Date</Text><Text style={s.value}>{dateLabel(selected)}</Text></View>
@@ -70,19 +71,19 @@ export function StudentLessonViews({ lessons, loading, error, refresh }: { lesso
         <View style={s.detailRow}><Text style={s.muted}>Timezone</Text><Text style={s.value}>Baku · UTC+4</Text></View>
         <View style={[s.detailRow, { borderBottomWidth: 0 }]}><Text style={s.muted}>Status</Text><Status lesson={selected} /></View>
       </View>
-      <Text style={s.subheading}>Before your lesson</Text><Text style={s.muted}>Have your notes ready and bring one topic you’d like to practise.</Text>
       <View style={s.notice}><GlassIcon name="information-circle-outline" size={21} color="#a49dff" /><Text style={[s.muted, { flex: 1 }]}>Your teacher will share any classroom or joining details with you.</Text></View>
       <Pressable accessibilityRole="button" accessibilityLabel="Manage lesson" onPress={() => changeSection("Manage lessons")} style={s.primary}><Text style={s.primaryText}>Manage lesson</Text><GlassIcon name="arrow-forward" size={20} color="#281e35" /></Pressable>
-      <Pressable accessibilityRole="button" onPress={() => changeSection("Lessons")} style={s.back}><Text style={s.link}>Back to lessons</Text></Pressable>
+      <Pressable accessibilityRole="button" onPress={() => changeSection("Lessons")} style={s.back}><View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}><BackIcon /><Text style={s.link}>Back to lessons</Text></View></Pressable>
     </> : <>
       <Text style={s.eyebrow}>YOUR BOOKING</Text><Text accessibilityRole="header" style={s.title}>Manage lesson</Text><Text style={s.subtitle}>{selected.enrollment.course.name}{"\n"}{dateLabel(selected)} · {timeLabel(selected)}{"\n"}With {teacherName(selected)}</Text>
-      {upcoming(selected) ? <LessonRescheduleControls key={`${selected.id}:${selected.rescheduledAt || ""}:${selected.rescheduleRequests?.[0]?.status || ""}`} lessonId={selected.id} onChanged={refresh} /> : <Text style={s.muted}>This lesson is {selected.status}. Contact your school if a cancellation was made by mistake.</Text>}
-      <Pressable accessibilityRole="button" onPress={() => changeSection("Lesson details")} style={s.back}><Text style={s.link}>Back to lesson</Text></Pressable>
+      {selected.rescheduledAt && <Text style={[s.notice, s.muted]}>Rescheduled to {dateLabel(selected)} - {timeLabel(selected)}</Text>}
+      {upcoming(selected) ? <LessonRescheduleControls key={`${selected.id}:${selected.rescheduledAt || ""}:${selected.rescheduleRequests?.[0]?.status || ""}`} lessonId={selected.id} teacherName={teacherName(selected)} onChanged={refresh} /> : <Text style={s.muted}>This lesson is {selected.status}. Contact your school if a cancellation was made by mistake.</Text>}
+      <Pressable accessibilityRole="button" onPress={() => changeSection("Lesson details")} style={s.back}><View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}><BackIcon /><Text style={s.link}>Back to lesson</Text></View></Pressable>
     </>}
   </ScrollView>;
 }
 const s = StyleSheet.create({
-  container: { width: "100%", maxWidth: 700, alignSelf: "center", padding: 22, gap: 16 },
+  container: { width: "100%", maxWidth: studentContentWidth, alignSelf: "center", padding: 22, gap: 16 },
   sections: { flexDirection: "row", gap: 6, marginBottom: 14 }, section: { flex: 1, minHeight: 44, borderRadius: 22, backgroundColor: "#272727", borderWidth: 1, borderColor: "#393939", alignItems: "center", justifyContent: "center", paddingHorizontal: 5 }, activeSection: { backgroundColor: "#8178ff", borderColor: "#a49dff" }, sectionText: { color: "#c8bad9", fontSize: 11, fontWeight: "600", textAlign: "center" }, activeText: { color: "#281e35" },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 12 }, title: { color: "#f7f4fc", fontSize: 28, fontWeight: "700", letterSpacing: -0.8 }, eyebrow: { color: "#aaa2ba", fontSize: 10, letterSpacing: 1.8, fontWeight: "700", marginBottom: 7 }, subtitle: { color: "#aaa6b6", fontSize: 14, lineHeight: 23 }, muted: { color: "#b3adbf", fontSize: 13, lineHeight: 21, flexShrink: 1 }, refresh: { padding: 9 },
   subheading: { color: "#f2edf8", fontSize: 19, fontWeight: "600", marginTop: 8 }, month: { color: "#b9a2d0", fontSize: 11, letterSpacing: 1.5, marginTop: 8, marginBottom: 14 }, cardGroup: { gap: 0 }, card: { padding: 20, backgroundColor: "#272727", borderRadius: 23, borderWidth: 1, borderColor: "#393939", gap: 13 }, nextCard: { borderLeftColor: "#a49dff", borderLeftWidth: 3 }, row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }, time: { fontSize: 26, color: "#f3eff9", fontWeight: "600", marginTop: 4 }, course: { fontSize: 17, color: "#eee8f5", fontWeight: "600", lineHeight: 24 }, teacherRow: { flexDirection: "row", alignItems: "center", gap: 10, borderTopWidth: 1, borderColor: "#393939", paddingTop: 16, marginTop: 7 }, initial: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#2d263b", alignItems: "center", justifyContent: "center" }, accent: { color: "#a49dff", fontWeight: "600" }, badge: { borderRadius: 18, paddingVertical: 8, paddingHorizontal: 11, backgroundColor: "#30273f" }, badgeText: { color: "#a49dff", fontSize: 11, fontWeight: "600" }, cancelled: { backgroundColor: "#3b2731" },

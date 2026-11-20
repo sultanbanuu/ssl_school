@@ -48,11 +48,11 @@ test("student reads only own assessments and never receives internal level in ro
   expect(calls.find(c => c.name === "roster")!.args.select.student.select.performanceLevel).toBe(false);
   expect(calls.find(c => c.name === "evaluations")!.args.where).toEqual({ studentId });
 });
-test("teacher reads only own students and evaluations", async () => {
+test("teacher reads assigned and shared-course students but only their own evaluations", async () => {
   const { send, calls } = setup("teacher");
   const response = await send(""); expect(response.status).toBe(200);
   expect((await response.json()).weights).toEqual(defaultWeights);
-  expect(calls.find(c => c.name === "roster")!.args.where).toEqual({ teacherId });
+  expect(calls.find(c => c.name === "roster")!.args.where).toEqual({ OR: [{ teacherId }, { course: { OR: [{ teacherId }, { teachers: { some: { teacherId } } }] } }, { lessons: { some: { teacherId, status: { in: ["scheduled", "completed"] } } } }] });
   expect(calls.find(c => c.name === "evaluations")!.args.where).toEqual({ teacherId });
 });
 test("only teachers can change weights or evaluate lessons", async () => {
@@ -81,4 +81,32 @@ test("only staff assign enrolled student levels", async () => {
   expect((await setup("admin", false).send(`/students/${studentId}/level`, { level: "B1" })).status).toBe(404);
   expect((await setup("admin").send(`/students/${studentId}/level`, { level: "B1" })).status).toBe(200);
   expect((await setup("admin").send(`/students/${studentId}/level`, { level: "bad" })).status).toBe(422);
+});
+
+// Enrollment ownership must not override the teacher explicitly assigned to a lesson.
+test("assigned lesson dates and scores work when enrollment belongs to another teacher", async () => {
+  const lessonId = "44444444-4444-4444-8444-444444444444";
+  let role: Role = "teacher";
+  let saved: any = null;
+  const lesson = { id: lessonId, teacherId, date: "2026-11-17", enrollment: { studentId, teacherId: "other-teacher", course: { name: "English" } } };
+  const matches = (where: any) => where.teacherId === lesson.teacherId && (!where.enrollment?.teacherId || where.enrollment.teacherId === lesson.enrollment.teacherId);
+  const db = {
+    profile: { findUnique: async () => ({ id, role, student: { id: studentId }, teacher: { id: teacherId } }) },
+    lesson: { findMany: async ({where}: any) => matches(where) && where.enrollment.studentId === studentId ? [lesson] : [], findFirst: async ({where}: any) => matches(where) && where.id === lessonId ? lesson : null },
+    lessonEvaluation: { findUnique: async () => saved, upsert: async ({create}: any) => saved = {id: "evaluation", ...create, lesson: {date: lesson.date}}, findMany: async ({where}: any) => saved && where.studentId === saved.studentId ? [saved] : [] },
+    enrollment: {findMany: async () => []},
+  };
+  const app = createApp({db: db as unknown as PrismaClient, origins: [], getSession: async () => ({user: {id}}), authHandler: async () => new Response()}).compile();
+  const dates = await app.handle(new Request(`http://localhost/api/performance/students/${studentId}/lessons`));
+  expect(dates.status).toBe(200);
+  expect((await dates.json()).map((row: any) => row.id)).toEqual([lessonId]);
+  const assessment = emptyAssessment(); assessment.speaking = [4,4,4,4]; assessment.vocabulary.earned = 14; assessment.listening.earned = 9; assessment.sentenceStructure.earned = 15;
+  const response = await app.handle(new Request(`http://localhost/api/performance/lessons/${lessonId}`, {method: "PUT", headers: {"content-type":"application/json"}, body: JSON.stringify({topic: "Assigned lesson", assessment})}));
+  expect(response.status).toBe(200);
+  role = "student";
+  const profile = await app.handle(new Request("http://localhost/api/performance"));
+  const data = await profile.json();
+  expect(data.evaluations).toHaveLength(1);
+  expect(data.evaluations[0].studentId).toBe(studentId);
+  expect(scores(data.evaluations[0].assessment).overall).toBe(79);
 });

@@ -11,8 +11,8 @@ test("Sayad working windows follow weekdays, Saturday, Sunday in Baku", () => {
   expect(workingRanges("Sayad", "2026-11-07")[0]!.startsAt.toISOString()).toBe("2026-11-07T08:30:00.000Z");
 });
 test("Sultanbanu works configured Baku hours except Wednesday and Sunday", () => {
-  for (const date of ["2026-11-02", "2026-11-03", "2026-11-05", "2026-11-06"]) expect(workingMinutes("Sultanbanu", date)).toEqual([[600, 660], [960, 1320]]);
-  expect(workingMinutes("Sultanbanu", "2026-11-07")).toEqual([[960, 1320]]);
+  for (const date of ["2026-11-02", "2026-11-03", "2026-11-05", "2026-11-06"]) expect(workingMinutes("Sultanbanu", date)).toEqual([[600, 660], [960, 1350]]);
+  expect(workingMinutes("Sultanbanu", "2026-11-07")).toEqual([[960, 1350]]);
   for (const date of ["2026-11-04", "2026-11-08"]) expect(workingMinutes("Sultanbanu", date)).toEqual([]);
 });
 
@@ -31,7 +31,7 @@ test("Sultanbanu calendar automatically exposes time released by a booking", asy
   lessons = [];
   const after = await read();
   expect(after.items[1]!.startsAt.toISOString()).toBe("2026-11-02T12:00:00.000Z");
-  expect(after.items[1]!.endsAt.toISOString()).toBe("2026-11-02T18:00:00.000Z");
+  expect(after.items[1]!.endsAt.toISOString()).toBe("2026-11-02T18:30:00.000Z");
 });
 
 test("calendar subtraction merges overlapping bookings and keeps only full-hour gaps", () => {
@@ -57,4 +57,10 @@ test("calendar free ranges come from lessons and held trials without availabilit
   expect(monday.map(i => i.startsAt.toISOString())).toEqual(["2026-11-02T06:00:00.000Z", "2026-11-02T13:00:00.000Z", "2026-11-02T14:15:00.000Z"]);
   expect(result.items.some(i => i.startsAt.toISOString().startsWith("2026-11-08"))).toBe(false);
   expect(result.hasMore).toBe(true); expect(result.nextOffset).toBe(7);
+});
+
+test("Banu display name uses the same working hours as Sultanbanu", () => {
+  for (const date of ["2026-11-02", "2026-11-04", "2026-11-07", "2026-11-08"]) {
+    expect(workingMinutes(" Banu ", date)).toEqual(workingMinutes("Sultanbanu", date));
+  }
 });

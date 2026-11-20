@@ -27,7 +27,7 @@ function matches(row: any, where: any): boolean {
 function fixture(role = "admin", actorTeacherId = teacherId) {
   let rows: any[] = [];
   let notifications: any[] = [];
-  const enrollment = { id: enrollmentId, teacherId, studentId, course: { name: "English", active: true }, student: { status: "active", profileId: studentId } };
+  const enrollment = { id: enrollmentId, teacherId, studentId, course: { name: "English", active: true }, student: { status: "active", profileId: studentId, profile: { firstName: "Aysel", lastName: "Aliyeva" } } };
   const tx = {
     trialRequest: { findFirst: async () => null },
     $queryRaw: async () => [],
@@ -271,6 +271,8 @@ describe("lesson reminder delivery", () => {
     expect(await deliverLessonReminders(f.db, new Date("2026-11-02T05:44:59Z"))).toBe(0);
     expect(await deliverLessonReminders(f.db, new Date("2026-11-02T05:45:00Z"))).toBe(2);
     expect(await deliverLessonReminders(f.db, new Date("2026-11-02T05:46:00Z"))).toBe(0);
+    expect(f.notifications().find((n: any) => n.userId === teacherId)?.title).toBe("Lesson reminder: Aysel Aliyeva");
+    expect(f.notifications().find((n: any) => n.userId === teacherId)?.message).toBe("Aysel Aliyeva · English · 2026-11-02 · 10:00–11:00 (Asia/Baku)");
     expect(f.notifications().map(n => n.userId)).toEqual([studentId, teacherId]);
   });
   test("cancelled and already-ended lessons do not send stale reminders", async () => {

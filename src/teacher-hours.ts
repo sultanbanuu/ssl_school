@@ -1,7 +1,7 @@
 export const BAKU_OFFSET = 4 * 3600000;
 export type TimeRange = { startsAt: Date; endsAt: Date };
 export const hasWorkingHours = (name: string | null | undefined) =>
-  ["sayad", "sultanbanu"].includes(name?.trim().toLowerCase() || "");
+  ["sayad", "sultanbanu", "banu"].includes(name?.trim().toLowerCase() || "");
 
 export function workingMinutes(
   firstName: string | null | undefined,
@@ -10,14 +10,14 @@ export function workingMinutes(
   const name = firstName?.trim().toLowerCase();
   if (!hasWorkingHours(firstName)) return [];
   const day = new Date(`${date}T12:00:00Z`).getUTCDay();
-  if (name === "sultanbanu")
+  if (name === "sultanbanu" || name === "banu")
     return day === 0 || day === 3
       ? []
       : day === 6
-        ? [[960, 1320]]
+        ? [[960, 1350]]
         : [
             [600, 660],
-            [960, 1320],
+            [960, 1350],
           ];
   return day === 0
     ? []

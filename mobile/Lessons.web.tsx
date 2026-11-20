@@ -18,12 +18,11 @@ import {
   type RepeatRule,
 } from "../src/scheduling";
 import { calendarCSS } from "./calendar-style";
-import { Availability } from "./Availability.web";
 import {
   LessonStatusDialog,
   type StatusAction,
 } from "./LessonStatusDialog.web";
-import { StudentPicker } from "./StudentPicker.web";
+import { StudentPicker, type SchedulingStudent } from "./StudentPicker.web";
 import { TimeRangePicker } from "./TimeRangePicker.web";
 
 type Person = { firstName: string | null; lastName: string | null };
@@ -35,7 +34,7 @@ type Enrollment = {
   course: { name: string };
   student: { profile: Person };
 };
-type Student = { id: string; status: string; profile: Person };
+type Student = SchedulingStudent;
 type Course = { id: string; name: string; active: boolean; teacherId: string };
 type Lesson = Omit<Schedule, "endTime"> & {
   endTime: string | null;
@@ -145,11 +144,7 @@ export function Lessons({
   role: string;
   onFailure: (error: unknown) => void;
 }) {
-  return role === "student" ? (
-    <Availability role={role} onFailure={onFailure} />
-  ) : (
-    <LessonCalendar role={role} onFailure={onFailure} />
-  );
+  return <LessonCalendar role={role} onFailure={onFailure} />;
 }
 function LessonCalendar({
   role,
@@ -181,6 +176,7 @@ function LessonCalendar({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [enrollmentOnly, setEnrollmentOnly] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [courseChoices, setCourseChoices] = useState<Course[]>([]);
   const [directoryLoading, setDirectoryLoading] = useState(false);
@@ -353,8 +349,8 @@ function LessonCalendar({
     }
   }
   useEffect(() => {
-    void loadDirectory();
-  }, []);
+    if (editable) void loadDirectory();
+  }, [editable]);
   function selectEnrollment(studentId: string, courseId: string) {
     if (!draft) return;
     const enrolled = enrollments.find(
@@ -386,7 +382,8 @@ function LessonCalendar({
       setDraft((current) =>
         current ? { ...current, enrollmentId: row.id } : current,
       );
-      setNotice("Enrollment created.");
+      setNotice("Student enrolled. Assign a teacher when scheduling a lesson.");
+      if (enrollmentOnly) setDraft(null);
     } catch (e) {
       failure(e);
     } finally {
@@ -394,7 +391,8 @@ function LessonCalendar({
       setSaving(false);
     }
   }
-  function openNew(date = schoolToday(), time = "10:00", endMinute?: number) {
+  function openNew(date = schoolToday(), time = "10:00", endMinute?: number, onlyEnroll = false) {
+    setEnrollmentOnly(onlyEnroll);
     if (!editable || saving) return;
     setError("");
     setDraft({
@@ -409,6 +407,7 @@ function LessonCalendar({
     void loadDirectory();
   }
   function openLesson(lesson: Lesson, slot = normalize(lesson)) {
+    setEnrollmentOnly(false);
     setError("");
     setDraft({
       ...initialDraft(slot.date, slot.startTime),
@@ -674,17 +673,20 @@ function LessonCalendar({
   );
   const visibleSlot = (l: Lesson) =>
     preview?.id === l.id ? preview.slot : normalize(l);
-  const teachers = teacherChoices.map((t) => [t.id, name(t.profile)]);
-  const courses = courseChoices
-    .filter((c) => c.active)
-    .map((c) => [c.id, c.name]);
+  const teachers = editable
+    ? teacherChoices.map((t) => [t.id, name(t.profile)])
+    : [...new Map(lessons.map((l) => [l.teacherId, name(l.teacher.profile)]))];
+  const courses = editable
+    ? courseChoices.filter((c) => c.active).map((c) => [c.id, c.name])
+    : [...new Map(lessons.map((l) => [l.enrollment.courseId, l.enrollment.course.name]))];
   const selected = draft?.id
     ? lessons.find((l) => l.id === draft.id)
     : undefined;
   const readOnly = !editable || (!!draft && draft.status !== "scheduled");
   function card(l: Lesson, style: React.CSSProperties = {}, allDay = false) {
     const slot = visibleSlot(l);
-    const label = `${name(l.enrollment.student.profile)}, ${l.enrollment.course.name}, ${slot.date}, ${slot.allDay ? "all day" : slot.startTime + " to " + slot.endTime}, ${l.status}`;
+    const person = editable ? name(l.enrollment.student.profile) : name(l.teacher.profile);
+    const label = `${person}, ${l.enrollment.course.name}, ${slot.date}, ${slot.allDay ? "all day" : slot.startTime + " to " + slot.endTime}, ${l.status}`;
     return (
       <div
         key={l.id}
@@ -695,10 +697,10 @@ function LessonCalendar({
         data-lesson-id={l.id}
         className={`cal-card ${allDay ? "all-day-card" : ""} ${l.status !== "scheduled" ? "is-terminal" : ""} ${l.status === "cancelled" ? "is-cancelled" : ""} ${preview?.id === l.id ? "is-dragging" : ""}`}
         style={{ ...color(l.enrollment.courseId, l.color), ...style }}
-        onContextMenu={(e) => {
+        onContextMenu={editable ? (e) => {
           e.preventDefault();
           setContextLesson(l);
-        }}
+        } : undefined}
         onPointerDown={(e) => startDrag(e, l)}
         onClick={() => {
           if (!editable || l.status !== "scheduled") openLesson(l);
@@ -711,14 +713,14 @@ function LessonCalendar({
         }}
       >
         <strong>
-          {name(l.enrollment.student.profile)}
+          {person}
           {l.seriesId ? " ↻" : ""}
         </strong>
         <small>{l.enrollment.course.name}</small>
         <small>
           {allDay ? "All day" : `${slot.startTime}–${slot.endTime}`}
         </small>
-        <small>{name(l.teacher.profile)}</small>
+        {editable && <small>{name(l.teacher.profile)}</small>}
         {l.status === "scheduled" && l.rescheduledAt && <small>Rescheduled</small>}
         {!allDay && editable && l.status === "scheduled" && (
           <span
@@ -783,12 +785,11 @@ function LessonCalendar({
       <style>{calendarCSS}</style>
       <div className="cal-heading">
         <div>
-          <span className="cal-eyebrow">
-            {staff ? "SCHOOL ADMINISTRATION" : "YOUR TIMETABLE"}
-          </span>
           <h1>Lesson calendar</h1>
         </div>
         {editable && (
+          <div className="cal-actions">
+          <button className="cal-button" disabled={saving} onClick={() => openNew(schoolToday(), "10:00", undefined, true)}>Enroll student</button>
           <button
             className="cal-button cal-primary"
             disabled={saving}
@@ -796,11 +797,9 @@ function LessonCalendar({
           >
             + Schedule a lesson
           </button>
+          </div>
         )}
       </div>
-      <p className="cal-subtitle">
-        A clear view of the week ahead. All times in Asia/Baku.
-      </p>
       <div className="cal-toolbar">
         <div className="cal-actions">
           <button
@@ -820,7 +819,7 @@ function LessonCalendar({
           </span>
         </div>
         <div className="cal-actions">
-          <select
+          {editable && <select
             aria-label="Filter by student"
             value={student}
             onChange={(e) => setStudent(e.target.value)}
@@ -831,7 +830,7 @@ function LessonCalendar({
                 {name(s.profile)}
               </option>
             ))}
-          </select>
+          </select>}
           <select
             aria-label="Filter by teacher"
             value={teacher}
@@ -862,7 +861,7 @@ function LessonCalendar({
             onClick={() => {
               setError("");
               void load();
-              void loadDirectory();
+              if (editable) void loadDirectory();
             }}
           >
             Refresh
@@ -885,7 +884,7 @@ function LessonCalendar({
           : saving
             ? "Saving schedule…"
             : !displayed.length
-              ? "No lessons this week. Choose a time to get started."
+              ? editable ? "No lessons this week. Choose a time to get started." : "No lessons scheduled this week."
               : ""}
       </div>
       <p className="cal-scroll-help">
@@ -1009,9 +1008,9 @@ function LessonCalendar({
           ))}
         </div>
       </div>
-      <div className="cal-footer">
+      {editable && <div className="cal-footer">
         Right-click a lesson to change its status.
-      </div>
+      </div>}
       {contextLesson && (
         <div
           className="lesson-context-backdrop"
@@ -1070,14 +1069,14 @@ function LessonCalendar({
         }}
       >
         {draft && (
-          <form onSubmit={submit}>
+          <form onSubmit={enrollmentOnly ? (e) => { e.preventDefault(); void createEnrollment(); } : submit}>
             <div className="dialog-head">
               <h2 id="lesson-title">
                 {draft.id
                   ? readOnly
                     ? "Lesson details"
                     : "Reschedule lesson"
-                  : "Schedule a lesson"}
+                  : enrollmentOnly ? "Enroll student in a course" : "Schedule a lesson"}
               </h2>
               <button
                 type="button"
@@ -1146,6 +1145,7 @@ function LessonCalendar({
                   )}
                 </div>
               )}
+              {!enrollmentOnly && <>
               {staff && (
                 <label className="enrollment-label teacher-select">
                   Teacher
@@ -1409,13 +1409,15 @@ function LessonCalendar({
                   new series.
                 </p>
               )}
+              </>}
             </fieldset>
             {error && (
               <p className="error" role="alert">
                 {error}
               </p>
             )}
-            {!readOnly && (
+            {enrollmentOnly && <p>Enrollment does not create an appointment. Choose the teacher and time later in Schedule a lesson.</p>}
+            {!readOnly && !enrollmentOnly && (
               <>
                 <div className="dialog-footer">
                   <button
@@ -1510,8 +1512,8 @@ function LessonCalendar({
               </button>
             )}
             <p>
-              School time · Asia/Baku. Reminders go to the student and teacher’s
-              notification inbox.
+              School time · Asia/Baku.
+              {editable && " Reminders go to the student and teacher’s notification inbox."}
             </p>
           </form>
         )}

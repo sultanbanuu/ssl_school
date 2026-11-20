@@ -34,6 +34,8 @@ export const calendarCSS = `
 .cal-primary,.lesson-dialog .save{background:#7064ed;border-color:#7064ed;color:white}
 .lesson-context-menu button{color:#f5f5f3;border-color:#444}
 .student-picker-options [aria-selected=true]{background:#423a65}
+.student-picker-email{display:flex;flex-wrap:wrap;gap:2px 8px;margin-top:4px;font-size:.8em;color:#c5c5c5}
+.student-picker-email span:first-child{min-width:0;overflow-wrap:anywhere}
 .lesson-dialog::backdrop{background:#0008}
 .cal-scroll{scrollbar-color:#59565f #222}.cal-scroll::-webkit-scrollbar-track{background:#222}.cal-scroll::-webkit-scrollbar-thumb{background:#59565f;border-color:#222}
 `;

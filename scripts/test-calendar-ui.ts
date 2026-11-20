@@ -23,7 +23,14 @@ try {
   const monday = addDays(today, -((new Date(dayNumber(today)).getUTCDay() + 6) % 7));
   const enrollment = { id: "enrollment", teacherId: "teacher", courseId: "course", studentId: "student", course: { name: "General English" }, student: { profile: { firstName: "Aylin", lastName: "Aliyeva" } } };
   const teachers = [{ id: "teacher", profile: { firstName: "Sara", lastName: "Wilson" } }, { id: "teacher2", profile: { firstName: "James", lastName: "Carter" } }];
-  const students = Array.from({ length: 101 }, (_, i) => ({ id: i ? "student" + i : "student", status: "active", profile: i ? { firstName: "Student", lastName: String(i) } : enrollment.student.profile }));
+  const students = Array.from({ length: 101 }, (_, i) => ({
+    id: i ? "student" + i : "student",
+    status: "active",
+    profile: i ? { firstName: "Student", lastName: String(i) } : {
+      ...enrollment.student.profile,
+      user: { email: "aylin@example.test", emailVerified: true },
+    },
+  }));
   const courses = [{ id: "course", name: "General English", active: true, teacherId: "teacher" }, { id: "course2", name: "IELTS preparation", active: true, teacherId: "teacher2" }, { id: "course3", name: "New course", active: true, teacherId: "teacher2" }];
   teachers.push({ id: "teacher3", profile: { firstName: "New", lastName: "Teacher" } });
   const enrollments: any[] = [enrollment];
@@ -45,7 +52,13 @@ try {
       if (request.method() === "POST") { const body = request.postDataJSON(); enrollmentWrites.push(body); const row = { ...body, id: "new-enrollment", teacherId: "teacher2" }; enrollments.push(row); return reply(row, 201); }
       return reply(enrollments.filter(e => role !== "teacher" || e.teacherId === "teacher"));
     }
-    if (url.pathname === "/api/scheduling-students") return reply(students.slice(Number(url.searchParams.get("offset") || 0), Number(url.searchParams.get("offset") || 0) + 100));
+    if (url.pathname === "/api/scheduling-students") {
+      const offset = Number(url.searchParams.get("offset") || 0);
+      return reply(students.slice(offset, offset + 100).map(({ profile, ...student }) => ({
+        ...student,
+        profile: role === "admin" ? profile : { firstName: profile.firstName, lastName: profile.lastName },
+      })));
+    }
     if (url.pathname === "/api/courses") return reply(courses);
     if (url.pathname === "/api/teachers") return reply(teachers);
     if (url.pathname.startsWith("/api/lessons")) {
@@ -65,6 +78,26 @@ try {
   const card = () => page.locator('[data-lesson-id="lesson-1"]');
   await card().waitFor();
   assert.equal(await card().locator("strong").textContent(), "Aylin Aliyeva");
+  await page.getByRole("button", { name: "Enroll student", exact: true }).click();
+  await page.getByRole("button", { name: "Student Select a student", exact: true }).click();
+  await page.getByRole("listbox", { name: "Students", exact: true }).getByRole("option", { name: /Aylin Aliyeva/ }).click();
+  await page.getByLabel("Course", { exact: true }).selectOption("course3");
+  assert.equal(await page.getByLabel("Lesson teacher", { exact: true }).count(), 0);
+  const beforeEnrollmentLessons = mutations.length;
+  await page.getByRole("button", { name: "Create enrollment", exact: true }).click();
+  await page.getByRole("dialog").waitFor({ state: "hidden" });
+  assert.equal(enrollmentWrites.at(-1).courseId, "course3");
+  assert.equal(mutations.length, beforeEnrollmentLessons);
+  await page.getByRole("button", { name: "+ Schedule a lesson", exact: true }).click();
+  await page.getByRole("button", { name: "Student Select a student", exact: true }).click();
+  await page.getByRole("listbox", { name: "Students", exact: true }).getByRole("option", { name: /Aylin Aliyeva/ }).click();
+  await page.getByLabel("Course", { exact: true }).selectOption("course3");
+  await page.getByText("Student is enrolled in this course.", { exact: true }).waitFor();
+  await page.getByLabel("Lesson teacher", { exact: true }).selectOption("teacher3");
+  assert.equal(await page.getByLabel("Lesson teacher", { exact: true }).inputValue(), "teacher3");
+  await page.getByRole("button", { name: "Close scheduler" }).click();
+  enrollments.pop(); enrollmentWrites.pop();
+  console.log("PASS standalone enrollment creates no appointment and allows later teacher selection");
   assert(await page.locator(".cal-scroll").evaluate(el => el.scrollWidth > el.clientWidth));
   const dayHeader = (await page.locator(`[data-header-date="${addDays(monday, 1)}"]`).boundingBox())!;
   await page.mouse.move(dayHeader.x + 100, dayHeader.y + 30); await page.mouse.down(); await page.mouse.move(dayHeader.x, dayHeader.y + 30, { steps: 8 }); await page.mouse.up();
@@ -105,7 +138,14 @@ try {
   conflict = false; await page.getByRole("button", { name: "Close scheduler" }).click(); console.log("PASS conflict keeps editor and original booking");
   await page.getByRole("button", { name: "+ Schedule a lesson", exact: true }).click();
   await page.getByRole("button", { name: "Student Select a student", exact: true }).click();
-  await page.getByRole("listbox", { name: "Students", exact: true }).getByRole("option", { name: "Aylin Aliyeva", exact: true }).click();
+  const studentOption = page.getByRole("listbox", { name: "Students", exact: true }).getByRole("option", { name: /Aylin Aliyeva/ });
+  await studentOption.getByText("aylin@example.test", { exact: true }).waitFor();
+  await studentOption.getByText("Verified", { exact: true }).waitFor();
+  assert(await studentOption.evaluate(option =>
+    parseFloat(getComputedStyle(option.querySelector("small")!).fontSize) < parseFloat(getComputedStyle(option).fontSize)));
+  await studentOption.click();
+  await page.getByRole("dialog").getByText("aylin@example.test", { exact: true }).waitFor();
+  await page.getByRole("dialog").getByText("Verified", { exact: true }).waitFor();
   await page.getByLabel("Course", { exact: true }).selectOption("course");
   await page.getByLabel("Lesson teacher", { exact: true }).selectOption("teacher2");
   const startSlider = page.getByRole("slider", { name: "Start time", exact: true });

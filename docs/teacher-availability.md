@@ -13,3 +13,11 @@ Teachers can delete their own slots; admins can delete any teacher's slot. The c
 Verification: `bun test tests/availability.test.ts`; export web to `dist/availability-review`, then run `bun scripts/test-availability-delete-ui.ts` for isolated phone/desktop and deletion-confirmation checks.
 
 The appointment picker is now shared by native and web. Phones show a selectable week strip and rounded appointment buttons for the selected day; tapping the month heading expands the month calendar. Desktop shows the month and seven day columns together. Blue marks the selected date, pale blue marks dates with slots, and amber marks reserved trials. Month navigation loads the full 42-day calendar range. Tapping a time opens the existing request/edit workflow, including deletion for teachers and admins.
+
+## Working hours and enrolled students
+
+All hours use Asia/Baku. Sayad works Monday–Friday 10:00–11:00 and 15:00–23:30, Saturday 12:30–23:30, with Sunday off. Banu (also named Sultanbanu) works Monday, Tuesday, Thursday and Friday 10:00–11:00 and 16:00–22:30, Saturday 16:00–22:30, with Wednesday and Sunday off.
+
+Enrolled students open their lesson → Manage lesson to see that lesson teacher’s free times. Openings are generated ahead for up to eight weeks from these hours, subtracting lessons and reserved trials; no manual publishing is required. The picker refreshes every 15 seconds and on focus, and bookings are rechecked when requested and approved. Unenrolled students continue to see Sayad’s 15-minute trials.
+
+Student web content uses a 1200px desktop width and shrinks to fit smaller screens.

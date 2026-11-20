@@ -47,8 +47,10 @@ export function useNotificationUpdates(userId: string | undefined) {
     refreshRef.current = poll;
     void poll();
     const timer = setInterval(() => void poll(), 15000);
+    const onPush = () => { void poll(); };
+    if (typeof window !== 'undefined') window.addEventListener('school-push-received', onPush);
     const sub = AppState.addEventListener('change', state => { if (state === 'active') void poll(); });
-    return () => { disposed = true; generation.current++; clearInterval(timer); sub.remove(); };
+    return () => { disposed = true; generation.current++; clearInterval(timer); sub.remove(); if (typeof window !== 'undefined') window.removeEventListener('school-push-received', onPush); };
   }, [userId]);
 
   return { count, banner, dismiss, syncCount, refresh };

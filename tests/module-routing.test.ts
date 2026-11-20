@@ -103,7 +103,7 @@ test("course creation keeps validation defaults, bigint storage and decimal resp
     getSession: async () => ({ user: { id: userId } }),
     db: {
       profile: { findUnique: async () => ({ id: userId, role: "admin" }) },
-      course: { create: async ({ data }: { data: any }) => { stored = data; return { id: userId, ...data, price: new Prisma.Decimal(data.price) }; } },
+      course: { create: async ({ data }: { data: any }) => { stored = data; const { teachers, ...fields } = data; return { id: userId, ...fields, price: new Prisma.Decimal(data.price) }; } },
     } as unknown as PrismaClient,
   });
   const response = await api.handle(new Request("http://localhost/api/courses", {

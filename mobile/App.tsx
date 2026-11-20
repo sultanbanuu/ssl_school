@@ -1,7 +1,9 @@
 import { phoneSchema } from "../src/shared/phone";
-import React, { useEffect, useState } from "react";
+import React, { lazy, Suspense, useEffect, useState } from "react";
+import * as Linking from "expo-linking";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -12,23 +14,38 @@ import {
   TextInput,
   View,
   useWindowDimensions,
+  type ViewStyle,
 } from "react-native";
 import { authClient, getProfile, SessionExpiredError } from "./auth-client";
-import { SchoolApp } from "./SchoolApp";
-import { removeDevicePush } from "./src/devicePush";
 import {
   birthDateSchema,
   learningTimeOptions,
   learningTimeSchema,
 } from "../src/modules/auth/schemas";
 
+const StaffSchoolApp = lazy(() => import("./SchoolApp").then(({ StaffSchoolApp }) => ({ default: StaffSchoolApp })));
+const StudentApp = lazy(() => import("./StudentApp").then(({ StudentApp }) => ({ default: StudentApp })));
 type Profile = Awaited<ReturnType<typeof getProfile>>;
+const authHorizontalPadding = 22;
+const authColumnGap = 40;
+const authMaxWidth = 1060;
+const scoreCardsAspectRatio = 16 / 9;
 export default function App() {
-  const [mode, setMode] = useState<"signup" | "signin">("signup");
+  const [mode, setMode] = useState<"signup" | "signin" | "verify" | "forgot" | "reset">("signin");
+  const [resetToken, setResetToken] = useState("");
+  const [resetSent, setResetSent] = useState(false);
+  const link = Linking.useURL();
+  const [resendAt, setResendAt] = useState(0);
+  const [resendSeconds, setResendSeconds] = useState(0);
+  const [notice, setNotice] = useState(() => Platform.OS === "web" && new URLSearchParams(globalThis.location.search).has("error")
+    ? "This verification link is invalid or has expired. Sign in to request a new link."
+    : "");
+  const verificationCallback = Platform.OS === "web" ? `${globalThis.location.origin}/` : "sslschool://";
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [surname, setSurname] = useState("");
   const [birthDate, setBirthDate] = useState("");
+  const [birthDateTouched, setBirthDateTouched] = useState(false);
   const [learningTime, setLearningTime] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -40,7 +57,95 @@ export default function App() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [signedIn, setSignedIn] = useState(false);
   const signup = mode === "signup";
-  const compact = useWindowDimensions().width < 760;
+  const recovery = mode === "forgot" || mode === "reset";
+  const { width, height } = useWindowDimensions();
+  const compact = width < 760;
+
+  useEffect(() => {
+    if (resendAt <= Date.now()) { setResendSeconds(0); return; }
+    const update = () => setResendSeconds(Math.max(0, Math.ceil((resendAt - Date.now()) / 1000)));
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  }, [resendAt]);
+
+  useEffect(() => {
+    const url = Platform.OS === "web" ? globalThis.location.href : link;
+    if (!url) return;
+    const params = new URL(url).searchParams;
+    if (params.get("flow") !== "reset-password") return;
+    const token = params.get("token") || "";
+    setResetToken(token);
+    setMode(token ? "reset" : "forgot");
+    setNotice("");
+    setError(params.has("error") || !token ? "This reset link is invalid or has expired. Request a new link below." : "");
+    setPassword("");
+    setConfirm("");
+    if (Platform.OS === "web") globalThis.history.replaceState(null, "", globalThis.location.pathname);
+  }, [link]);
+
+  async function submitRecovery() {
+    if (busy) return;
+    setError("");
+    const cleanEmail = email.trim().toLowerCase();
+    if (mode === "forgot" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) return setError("Enter a valid email address.");
+    if (mode === "reset" && (password.length < 12 || password.length > 128)) return setError("Use a password between 12 and 128 characters.");
+    if (mode === "reset" && password !== confirm) return setError("Your passwords don't match.");
+    setBusy(true);
+    try {
+      const result = mode === "forgot"
+        ? await authClient.requestPasswordReset({ email: cleanEmail, redirectTo: `${verificationCallback}?flow=reset-password` })
+        : await authClient.resetPassword({ token: resetToken, newPassword: password });
+      if (result.error) {
+        setError(result.error.status === 429 ? "Too many attempts. Please wait a minute and try again." : mode === "reset" ? "This reset link is invalid or has expired. Request a new link." : "We couldn't send the reset email. Please try again.");
+        return;
+      }
+      if (mode === "forgot") {
+        setResetSent(true);
+        setNotice("If an account exists for this email, a password-reset link has been sent. Check your inbox and spam folder. The link expires in one hour.");
+      } else {
+        setResetToken(""); setPassword(""); setConfirm(""); setProfile(null); setSignedIn(false); setMode("signin");
+        setNotice("Your password has been reset. Sign in with your new password.");
+      }
+    } catch {
+      setError("Couldn't connect to SSL School. Please try again.");
+    } finally { setBusy(false); }
+  }
+
+  function showVerification(cleanEmail: string) {
+    setEmail(cleanEmail);
+    setMode("verify");
+    setPassword("");
+    setConfirm("");
+    setResendAt(Date.now() + 60000);
+  }
+
+  async function resendVerification() {
+    if (busy || Date.now() < resendAt) return;
+    const cleanEmail = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) return setError("Enter your email address first.");
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await authClient.sendVerificationEmail({ email: cleanEmail, callbackURL: verificationCallback });
+      if (result.error) {
+        if (result.error.status === 429) setResendAt(Date.now() + 60000);
+        setError(result.error.status === 429 ? "Please wait a minute before requesting another email." : "We couldn't send the verification email. Please try again or contact the school.");
+        return;
+      }
+      showVerification(cleanEmail);
+      setNotice("If this account needs verification, a new link has been requested. Check your inbox and spam folder.");
+    } catch {
+      setError("Couldn't connect to SSL School. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  const centerSignIn = !compact && !signup && !signedIn;
+  const stickySignupImage = Platform.OS === "web" && signup && !compact && !signedIn;
+  const imageColumnWidth = (Math.min(authMaxWidth, width - 2 * authHorizontalPadding) - authColumnGap) / 2;
+  const signupImageTop = Math.max(0, (height - imageColumnWidth / scoreCardsAspectRatio) / 2);
 
   function handleFailure(error: unknown) {
     if (error instanceof SessionExpiredError) {
@@ -57,30 +162,33 @@ export default function App() {
     }
   }
 
-  async function restore() {
+  async function restore(clearError = true) {
     setChecking(true);
-    setError("");
+    if (clearError) setError("");
     try {
-      const result = await authClient.getSession();
-      if (result.error)
-        throw new Error("We couldn't check your session. Please try again.");
-      setSignedIn(!!result.data);
-      if (result.data) setProfile(await getProfile());
-      else setProfile(null);
+      setProfile(await getProfile());
+      setSignedIn(true);
     } catch (error) {
-      handleFailure(error);
+      if (error instanceof SessionExpiredError) {
+        setProfile(null);
+        setSignedIn(false);
+      } else {
+        setSignedIn(true);
+        handleFailure(error);
+      }
     } finally {
       setChecking(false);
     }
   }
   useEffect(() => {
-    void restore();
+    void restore(false);
   }, []);
 
   async function submit() {
     if (busy) return;
     setError("");
     const cleanEmail = email.trim().toLowerCase();
+    setNotice("");
     if (signup && (!name.trim() || name.trim().length > 160))
       return setError("Enter your name (up to 160 characters).");
     if (signup && (!surname.trim() || surname.trim().length > 160))
@@ -110,9 +218,14 @@ export default function App() {
             learningTime,
             email: cleanEmail,
             password,
+            callbackURL: verificationCallback,
           })
-        : await authClient.signIn.email({ email: cleanEmail, password });
+        : await authClient.signIn.email({ email: cleanEmail, password, callbackURL: verificationCallback });
       if (result.error) {
+        if (result.error.code === "EMAIL_NOT_VERIFIED") {
+          showVerification(cleanEmail);
+          return;
+        }
         setError(
           result.error.status === 429
             ? "Too many attempts. Please wait a moment and try again."
@@ -120,6 +233,10 @@ export default function App() {
               ? "The school server couldn't process sign-in. Please try again shortly or contact the school."
             : result.error.message || "Unable to sign in. Please try again.",
         );
+        return;
+      }
+      if (signup) {
+        showVerification(cleanEmail);
         return;
       }
       setSignedIn(true);
@@ -136,6 +253,7 @@ export default function App() {
     setBusy(true);
     setError("");
     try {
+      const { removeDevicePush } = await import("./src/devicePush");
       await removeDevicePush();
       const result = await authClient.signOut();
       if (result.error) throw new Error("Couldn't sign out. Please try again.");
@@ -151,22 +269,30 @@ export default function App() {
     }
   }
   function switchMode() {
+    setNotice("");
     setMode(signup ? "signin" : "signup");
     setError("");
     setPassword("");
     setConfirm("");
   }
 
-  if (!checking && signedIn && profile)
+  if (checking || (signedIn && busy && !profile && !error)) return <OpeningSchool />;
+
+  if (signedIn && profile && !recovery) {
+    const SchoolApp = profile.role === "student" ? StudentApp : StaffSchoolApp;
     return (
-      <SchoolApp
-        profile={profile}
-        onSignOut={logout}
-        busy={busy}
-        error={error}
-        onFailure={handleFailure}
-      />
+      <Suspense fallback={<OpeningSchool />}>
+        <SchoolApp
+          key={profile.id}
+          profile={profile}
+          onSignOut={logout}
+          busy={busy}
+          error={error}
+          onFailure={handleFailure}
+        />
+      </Suspense>
     );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -175,43 +301,34 @@ export default function App() {
     >
       <StatusBar barStyle="light-content" />
       <ScrollView
-        contentContainerStyle={s.scroll}
+        contentContainerStyle={[s.scroll, centerSignIn && s.centeredScroll]}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={s.shell}>
+        <View style={[s.shell, centerSignIn && s.centeredShell]}>
           <View style={s.brand}>
-            <View style={s.logo}>
-              <Text style={s.logoText}>s.</Text>
-            </View>
-            <Text style={s.brandName}>
-              ssl school<Text style={s.brandDot}>.</Text>
-            </Text>
-            <Text style={s.brandTag}>ENGLISH, EVERY DAY</Text>
+            <Image
+              source={require("./assets/brand/logo.png")}
+              style={s.logo}
+              accessible={false}
+            />
+            <Image
+              source={require("./assets/brand/tag-brand-name.png")}
+              style={s.brandTag}
+              resizeMode="contain"
+              accessibilityLabel="SSL School"
+              accessible
+            />
           </View>
-          <View style={s.layout}>
+          <View style={[s.layout, centerSignIn && s.centeredLayout]}>
             {!compact && (
-              <View style={s.intro}>
-                <Text style={s.eyebrow}>
-                  A LITTLE PRACTICE. A WORLD OF POSSIBILITY.
-                </Text>
-                <Text style={s.hero}>
-                  Your next{`\n`}chapter starts{`\n`}with{" "}
-                  <Text style={s.heroAccent}>hello.</Text>
-                </Text>
-                <Text style={s.introCopy}>
-                  Build your confidence, find your voice, and make English part
-                  of your everyday life.
-                </Text>
-                <View style={s.note}>
-                  <Text style={s.noteIcon}>✦</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.noteTitle}>Small steps. Real progress.</Text>
-                    <Text style={s.noteCopy}>
-                      Your learning journey, at your pace.
-                    </Text>
-                  </View>
-                </View>
-                <Text style={s.introFooter}>LEARN · PRACTICE · GROW</Text>
+              <View style={[s.intro, stickySignupImage && s.stickyIntro, stickySignupImage && { top: signupImageTop }]}>
+                <Image
+                  source={require("./assets/score-cards.png")}
+                  style={s.scoreCards}
+                  resizeMode="contain"
+                  accessible
+                  accessibilityLabel="Example scores out of 100: Speaking 95, Vocabulary 98, Listening 100, Sentence structure 97."
+                />
               </View>
             )}
             <View
@@ -220,32 +337,17 @@ export default function App() {
                 compact && { flexBasis: "auto", width: "100%", padding: 22 },
               ]}
             >
-              {checking ? (
-                <View style={s.loading}>
-                  <ActivityIndicator color="#245e50" />
-                  <Text style={s.subtitle}>Getting things ready…</Text>
-                </View>
-              ) : signedIn ? (
+              {signedIn && !recovery ? (
                 <>
-                  <Text style={s.eyebrow}>YOU'RE IN</Text>
-                  <Text style={s.title}>
-                    Hello{profile?.firstName ? `, ${profile.firstName}` : ""}.
-                  </Text>
-                  <Text style={s.subtitle}>
-                    {profile
-                      ? "Your SSL School account is ready."
-                      : "You're signed in. Let's load your profile."}
-                  </Text>
+                  <Text style={s.title}>Unable to open SSL School</Text>
                   {!!error && (
                     <Text accessibilityRole="alert" style={s.error}>
                       {error}
                     </Text>
                   )}
-                  {!profile && (
-                    <Pressable style={s.primary} onPress={restore}>
-                      <Text style={s.primaryText}>Retry loading profile</Text>
-                    </Pressable>
-                  )}
+                  <Pressable accessibilityRole="button" disabled={busy} style={s.primary} onPress={() => void restore()}>
+                    <Text style={s.primaryText}>Retry loading profile</Text>
+                  </Pressable>
                   <Pressable
                     accessibilityRole="button"
                     disabled={busy}
@@ -257,17 +359,32 @@ export default function App() {
                     </Text>
                   </Pressable>
                 </>
+              ) : mode === "verify" ? (
+                <>
+                  <Text style={s.eyebrow}>VERIFY YOUR EMAIL</Text>
+                  <Text accessibilityRole="header" style={s.title}>Check your email.</Text>
+                  <Text style={s.subtitle}>We've sent a verification link to</Text>
+                  <Text selectable style={[s.link, { marginBottom: 24 }]}>{email}</Text>
+                  <Text style={s.subtitle}>Open the link to verify your email, then come back here to sign in. The link expires in one hour.</Text>
+                  <Text style={s.hint}>Can't find it? Check your spam or junk folder, or request another email below.</Text>
+                  {!!notice && <Text accessibilityRole="alert" style={s.subtitle}>{notice}</Text>}
+                  {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}
+                  <Pressable accessibilityRole="button" disabled={busy} style={s.primary} onPress={() => { setMode("signin"); setNotice(""); setError(""); }}>
+                    <Text style={s.primaryText}>Back to sign in →</Text>
+                  </Pressable>
+                  <Pressable accessibilityRole="button" disabled={busy || resendSeconds > 0} accessibilityState={{ disabled: busy || resendSeconds > 0 }} style={[s.secondary, (busy || resendSeconds > 0) && { opacity: 0.6 }]} onPress={resendVerification}>
+                    <Text style={s.link}>{busy ? "Sending…" : resendSeconds > 0 ? `Resend email in ${resendSeconds}s` : "Resend verification email"}</Text>
+                  </Pressable>
+                </>
               ) : (
                 <>
-                  <Text style={s.eyebrow}>YOUR LEARNING JOURNEY</Text>
+                  {signup && <Text style={s.eyebrow}>YOUR LEARNING JOURNEY</Text>}
                   <Text style={s.title}>
-                    {signup ? "Start something good." : "Welcome back."}
+                    {signup ? "Start something good." : mode === "forgot" ? "Forgot Password?" : mode === "reset" ? "Reset password" : "Sign in"}
                   </Text>
-                  <Text style={s.subtitle}>
-                    {signup
-                      ? "Create your student account. We'll take it from here."
-                      : "Sign in and take your next step."}
-                  </Text>
+                  {signup && <Text style={s.subtitle}>Create your student account. We'll take it from here.</Text>}
+                  {mode === "forgot" && !resetSent && <Text style={s.subtitle}>Enter your email to receive a password-reset link.</Text>}
+                  {!!notice && <Text accessibilityRole="alert" style={s.subtitle}>{notice}</Text>}
                   {signup && (
                     <>
                       <Field
@@ -295,11 +412,13 @@ export default function App() {
                         label="Birth date (YYYY-MM-DD)"
                         value={birthDate}
                         onChangeText={setBirthDate}
+                        onBlur={() => setBirthDateTouched(true)}
                         placeholder="YYYY-MM-DD"
                         autoCapitalize="none"
                         editable={!busy}
                         maxLength={10}
                       />
+                      <View style={{ minHeight: 44 }}>{birthDateTouched && !birthDateSchema.safeParse(birthDate).success && <Text accessibilityRole="alert" style={s.error}>Enter a valid birth date with dashes: YYYY-MM-DD.</Text>}</View>
                       <View
                         accessibilityRole="radiogroup"
                         accessibilityLabel="How many hours can you spend learning?"
@@ -327,8 +446,8 @@ export default function App() {
                               style={[
                                 s.input,
                                 learningTime === option && {
-                                  backgroundColor: "#272727",
-                                  borderColor: "#3d3d3d",
+                                  backgroundColor: "#7064ed",
+                                  borderColor: "#7064ed",
                                 },
                               ]}
                             >
@@ -339,17 +458,17 @@ export default function App() {
                       </View>
                     </>
                   )}
-                  <Field
+                  {mode !== "reset" && <Field
                     label="Email address"
                     value={email}
-                    onChangeText={setEmail}
+                    onChangeText={(value) => { setEmail(value); setResetSent(false); setNotice(""); }}
                     placeholder="you@example.com"
                     autoComplete="email"
                     keyboardType="email-address"
                     autoCapitalize="none"
                     editable={!busy}
-                  />
-                  <View>
+                  />}
+                  {mode !== "forgot" && <View>
                     <View style={s.passwordLabel}>
                       <Text style={s.label}>Password</Text>
                       <Pressable
@@ -373,16 +492,16 @@ export default function App() {
                       autoCapitalize="none"
                       autoCorrect={false}
                       autoComplete={
-                        signup ? "new-password" : "current-password"
+                        signup || mode === "reset" ? "new-password" : "current-password"
                       }
                       editable={!busy}
                       maxLength={128}
                     />
-                    {signup && (
+                    {(signup || mode === "reset") && (
                       <Text style={s.hint}>Use 12–128 characters.</Text>
                     )}
-                  </View>
-                  {signup && (
+                  </View>}
+                  {(signup || mode === "reset") && (
                     <Field
                       label="Confirm password"
                       value={confirm}
@@ -402,9 +521,9 @@ export default function App() {
                   )}
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityState={{ disabled: busy }}
-                    disabled={busy}
-                    onPress={submit}
+                    accessibilityState={{ disabled: busy || (mode === "forgot" && resetSent) }}
+                    disabled={busy || (mode === "forgot" && resetSent)}
+                    onPress={recovery ? submitRecovery : submit}
                     style={({ pressed }) => [
                       s.primary,
                       (pressed || busy) && { opacity: 0.75 },
@@ -414,17 +533,17 @@ export default function App() {
                       <ActivityIndicator color="#fff" />
                     ) : (
                       <Text style={s.primaryText}>
-                        {signup ? "Create account  →" : "Sign in  →"}
+                        {signup ? "Create account  →" : mode === "forgot" ? (resetSent ? "Reset link requested" : "Send reset link") : mode === "reset" ? "Reset password" : "Sign in  →"}
                       </Text>
                     )}
                   </Pressable>
-                  {!signup && (
-                    <Text style={s.hint}>
-                      Forgot your password? Contact your school administrator.
-                    </Text>
+                  {(mode === "signin" || mode === "reset") && (
+                    <Pressable accessibilityRole="button" disabled={busy} style={s.secondary} onPress={() => { setMode("forgot"); setResetSent(false); setPassword(""); setConfirm(""); setError(""); setNotice(""); }}>
+                      <Text style={s.link}>{mode === "reset" ? "Request a new reset link" : "Forgot Password?"}</Text>
+                    </Pressable>
                   )}
                   <View style={s.divider} />
-                  <View style={s.switchRow}>
+                  {recovery ? <Pressable accessibilityRole="button" disabled={busy} style={s.secondary} onPress={() => { setMode("signin"); setResetToken(""); setPassword(""); setConfirm(""); setError(""); setNotice(""); }}><Text style={s.link}>Back to sign in</Text></Pressable> : <View style={s.switchRow}>
                     <Text style={s.switchText}>
                       {signup
                         ? "Already learning with us?"
@@ -439,19 +558,31 @@ export default function App() {
                         {signup ? "Sign in" : "Create an account"}
                       </Text>
                     </Pressable>
-                  </View>
+                  </View>}
                 </>
               )}
             </View>
           </View>
-          <Text style={s.footer}>
-            SSL School / A new way to find your voice.
-          </Text>
+          {signup && (
+            <Text style={s.footer}>
+              SSL School / A new way to find your voice.
+            </Text>
+          )}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
+function OpeningSchool() {
+  return (
+    <View style={[s.page, s.loading]} accessibilityRole="progressbar" accessibilityLabel="Opening SSL School" accessibilityState={{ busy: true }}>
+      <StatusBar barStyle="light-content" />
+      <ActivityIndicator size="large" color="#a49dff" />
+      <Text style={s.subtitle}>Opening SSL School…</Text>
+    </View>
+  );
+}
+
 function Field({
   label,
   ...props
@@ -473,11 +604,13 @@ const s = StyleSheet.create({
   page: { flex: 1, backgroundColor: "#272727" },
   scroll: {
     flexGrow: 1,
-    paddingHorizontal: 22,
+    paddingHorizontal: authHorizontalPadding,
     paddingTop: 56,
     paddingBottom: 24,
   },
-  shell: { width: "100%", maxWidth: 1120, alignSelf: "center" },
+  centeredScroll: { paddingTop: 32, paddingBottom: 112 },
+  shell: { width: "100%", maxWidth: authMaxWidth, alignSelf: "center" },
+  centeredShell: { flexGrow: 1 },
   brand: {
     flexDirection: "row",
     alignItems: "center",
@@ -485,25 +618,28 @@ const s = StyleSheet.create({
     flexWrap: "wrap",
     marginBottom: 42,
   },
-  logo: {
-    backgroundColor: "#7064ed",
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  logoText: { color: "#f5f5f3", fontSize: 28, fontWeight: "700" },
-  brandName: { fontSize: 24, fontWeight: "700", color: "#f5f5f3" },
-  brandDot: { color: "#ff9b90" },
-  brandTag: { fontSize: 9, letterSpacing: 2, color: "#b5b5b5", marginLeft: 10 },
+  logo: { width: 104, height: 104 },
+  brandTag: { width: 128, height: 27, tintColor: "#f5f5f3" },
   layout: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 40,
-    alignItems: "center",
+    gap: authColumnGap,
+    alignItems: "flex-start",
   },
-  intro: { flexGrow: 1, flexBasis: 340, paddingVertical: 14 },
+  centeredLayout: { marginVertical: "auto" },
+  intro: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 340,
+    aspectRatio: scoreCardsAspectRatio,
+    alignSelf: "center",
+  },
+  stickyIntro: { position: "sticky" as ViewStyle["position"], alignSelf: "flex-start" },
+  scoreCards: {
+    ...StyleSheet.absoluteFill,
+    width: "100%",
+    height: "100%",
+    transform: [{ scale: 1.08 }],
+  },
   eyebrow: {
     fontSize: 10,
     letterSpacing: 1.6,
@@ -511,43 +647,10 @@ const s = StyleSheet.create({
     fontWeight: "700",
     marginBottom: 20,
   },
-  hero: {
-    fontSize: 52,
-    lineHeight: 57,
-    fontWeight: "600",
-    letterSpacing: -2,
-    color: "#f5f5f3",
-  },
-  heroAccent: { color: "#ff9b90", fontStyle: "italic" },
-  introCopy: {
-    fontSize: 16,
-    lineHeight: 26,
-    color: "#b5b5b5",
-    maxWidth: 365,
-    marginTop: 24,
-  },
-  note: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    marginTop: 32,
-    backgroundColor: "#272727",
-    padding: 19,
-    borderRadius: 16,
-    maxWidth: 370,
-  },
-  noteIcon: { fontSize: 28, color: "#b5b5b5" },
-  noteTitle: { fontSize: 14, fontWeight: "600", color: "#f5f5f3" },
-  noteCopy: { fontSize: 12, color: "#b5b5b5", marginTop: 5 },
-  introFooter: {
-    fontSize: 9,
-    letterSpacing: 3,
-    color: "#b5b5b5",
-    marginTop: 34,
-  },
   card: {
     flexGrow: 1,
-    flexBasis: 360,
+    flexShrink: 1,
+    flexBasis: 340,
     backgroundColor: "#272727",
     padding: 28,
     borderRadius: 24,
@@ -620,8 +723,6 @@ const s = StyleSheet.create({
     fontSize: 11,
     marginTop: 32,
   },
-  loading: { paddingVertical: 70, alignItems: "center", gap: 16 },
-  account: { backgroundColor: "#272727", padding: 20, borderRadius: 12 },
-  accountRole: { fontSize: 22, color: "#f5f5f3", fontWeight: "600" },
+  loading: { justifyContent: "center", alignItems: "center", gap: 16 },
   secondary: { alignItems: "center", padding: 12 },
 });

@@ -1,3 +1,4 @@
+import { hasCourseTeacher } from "../../shared/course-teachers";
 import { setAuditActor } from "../../shared/audit";
 import type { z } from "zod";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
@@ -290,11 +291,12 @@ export function createLessonService(db: PrismaClient) {
           await scheduleLock(tx);
           const enrollment = await tx.enrollment.findUnique({
             where: { id: body.enrollmentId },
-            include: { student: true, course: true },
+            include: { student: true, course: { include: { teachers: true } } },
           });
           if (
             actor.role === "teacher" &&
-            enrollment?.teacherId !== actor.teacherId
+            enrollment?.teacherId !== actor.teacherId &&
+            !hasCourseTeacher(enrollment?.course, actor.teacherId!)
           )
             throw new HttpError(404, "Enrollment not found");
           if (
@@ -305,7 +307,7 @@ export function createLessonService(db: PrismaClient) {
             throw new HttpError(422, "Select an active enrollment");
           const teacherId = body.teacherId
             ? await selectedTeacher(tx, body.teacherId)
-            : enrollment.teacherId;
+            : actor.role === "teacher" ? actor.teacherId! : enrollment.teacherId;
           let slots: Schedule[];
           try {
             slots = occurrences(body, body.repeat);

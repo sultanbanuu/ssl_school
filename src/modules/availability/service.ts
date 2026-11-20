@@ -1,4 +1,5 @@
 import { setAuditActor } from "../../shared/audit";
+import { hasCourseTeacher } from "../../shared/course-teachers";
 import type { z } from "zod";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 import { DAY, addDays, timeString } from "../../scheduling";
@@ -125,8 +126,8 @@ async function validateSlot(
   const owned = management(actor);
   if ("teacherId" in owned && body.teacherId !== owned.teacherId)
     throw new HttpError(403, "Publish availability only for yourself");
-  const course = await tx.course.findUnique({ where: { id: body.courseId } });
-  if (!course?.active || course.teacherId !== body.teacherId)
+  const course = await tx.course.findUnique({ where: { id: body.courseId }, include: { teachers: true } });
+  if (!course?.active || !hasCourseTeacher(course, body.teacherId))
     throw new HttpError(
       422,
       "Choose an active course belonging to this teacher",

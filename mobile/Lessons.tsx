@@ -279,7 +279,7 @@ function StaffLessons({
           ).map(([label, value, update]) => (
             <View key={label}>
               <Text style={{ color: "#f5f5f3" }}>{label}</Text>
-              <TextInput
+              <TextInput 
                 accessibilityLabel={label}
                 editable={!busy}
                 value={value}
