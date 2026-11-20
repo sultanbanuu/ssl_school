@@ -130,7 +130,9 @@ async function fixture(
     }
     if (endpoint === "/api/auth/sign-out") { state.signedIn = false; return reply({ success: true }); }
     if (endpoint === "/api/me")
-      return reply({ id: "self", firstName: "Test", role });
+      return state.signedIn
+        ? reply({ id: "self", firstName: "Test", role })
+        : reply({ error: "Unauthorized" }, 401);
     if (endpoint === "/api/lessons" || endpoint === "/api/enrollments" || endpoint === "/api/courses") return reply([]);
     if (endpoint === "/api/payments") return reply([]);
     if (endpoint === "/api/performance") return reply({ enrollments: [], evaluations: [], weights: {} });
@@ -237,9 +239,32 @@ async function fixture(
   for (const role of ["student", "teacher", "manager", "admin"] as const)
     await test(`${role} restores one session across lessons, payments and notifications`, async () => {
       const { page, state, close } = await fixture(role, 390, [], false);
+      if (role === "student") {
+        // The student app opens on Today; Lesson and Profile are tabs, billing lives under Profile.
+        await page.getByText("Hi, Test.", { exact: true }).waitFor();
+        await page.getByRole("button", { name: "Notifications", exact: true }).click();
+        await page.getByText("Nothing here yet", { exact: true }).waitFor();
+        await page.getByRole("tab", { name: "Lesson", exact: true }).click();
+        await page.getByRole("heading", { name: "Your lessons", exact: true }).waitFor();
+        await page.getByRole("tab", { name: "Profile", exact: true }).click();
+        await page.getByRole("button", { name: "Settings", exact: true }).click();
+        await page.getByRole("button", { name: "Billing & subscriptions", exact: true }).click();
+        await page.getByRole("button", { name: "Sign out", exact: true }).waitFor({ state: "hidden" });
+        await page.getByRole("button", { name: /^Back to/ }).click();
+        await page.getByRole("button", { name: "Sign out", exact: true }).click();
+        await page.getByRole("textbox", { name: "Email address", exact: true }).waitFor();
+        assert.equal(state.signedIn, false);
+        await close();
+        return;
+      }
       await page.getByRole("heading", { name: role === "student" ? "Your lessons" : "Lesson calendar", exact: true }).waitFor();
-      await page.getByRole("button", { name: "Payments", exact: true }).click();
-      await page.getByText(role === "student" ? "Payment history" : role === "admin" ? "Payment review" : "Payments are private.", { exact: true }).waitFor();
+      // Only admins have a Payments entry in staff navigation.
+      if (role === "admin") {
+        await page.getByRole("button", { name: "Payments", exact: true }).click();
+        await page.getByText("Payment review", { exact: true }).waitFor();
+      } else {
+        assert.equal(await page.getByRole("button", { name: "Payments", exact: true }).count(), 0);
+      }
       await page.getByRole("button", { name: "Notifications", exact: true }).click();
       await page.getByText("Nothing here yet", { exact: true }).waitFor();
       await page.getByRole("button", { name: "Lessons", exact: true }).click();
@@ -248,135 +273,64 @@ async function fixture(
       assert.equal(state.signedIn, false);
       await close();
     });
-  for (const signup of [false, true])
-    await test(`${signup ? "signup" : "sign-in"} opens the combined school app`, async () => {
-      const { page, state, close } = await fixture("student", 390, [], false, false);
-      await page.getByRole("textbox", { name: "Email address", exact: true }).waitFor();
-      if (signup) {
-        await page.getByRole("textbox", { name: "Full name", exact: true }).fill("New Student");
-      } else {
-        await page.getByRole("button", { name: "Sign in", exact: true }).click();
-      }
-      await page.getByRole("textbox", { name: "Email address", exact: true }).fill("student@example.test");
-      await page.getByRole("textbox", { name: "Password", exact: true }).fill("fixture-password-123");
-      if (signup) await page.getByRole("textbox", { name: "Confirm password", exact: true }).fill("fixture-password-123");
-      await page.getByRole("button", { name: signup ? "Create account →" : "Sign in →", exact: true }).click();
-      await page.getByRole("heading", { name: "Your lessons", exact: true }).waitFor();
-      assert.equal(state.signedIn, true);
-      assert(state.calls.some(c => c.endpoint === (signup ? "/api/auth/sign-up/email" : "/api/auth/sign-in/email")));
-      await close();
-    });
-  await test("student inbox, full detail, mark read, unread filter, mark all", async () => {
-    const { page, state, close } = await fixture();
-    await page.getByText("2 unread updates", { exact: true }).waitFor();
-    assert.equal(
-      await page
-        .getByRole("button", { name: "+  Send a school update", exact: true })
-        .count(),
-      0,
-    );
-    assert.equal(
-      state.calls.filter((c) => c.endpoint.endsWith("/recipients")).length,
-      0,
-    );
-    await page.screenshot({
-      path: path.join(output, "inbox-mobile.png"),
-      fullPage: true,
-    });
-    await page
-      .getByRole("button", {
-        name: "Unread: School update 1. Open message",
-        exact: true,
-      })
-      .click();
-    await page.getByText("SCHOOL UPDATE · UNREAD", { exact: true }).waitFor();
-    await screenshot(page, "detail-mobile.png");
-    await page
-      .getByRole("button", { name: "Mark as read", exact: true })
-      .last()
-      .click();
-    await page.getByText("SCHOOL UPDATE · READ", { exact: true }).waitFor();
-    await page
-      .getByRole("button", { name: "‹  Back to notifications", exact: true })
-      .click();
-    await page.getByRole("button", { name: "Unread", exact: true }).click();
-    await page
-      .getByRole("button", {
-        name: "Unread: School update 3. Open message",
-        exact: true,
-      })
-      .waitFor();
-    assert.equal(
-      await page
-        .getByRole("button", {
-          name: "Read: School update 1. Open message",
-          exact: true,
-        })
-        .count(),
-      0,
-    );
-    await page
-      .getByRole("button", { name: "Mark all as read", exact: true })
-      .click();
-    await page.getByText("No unread notifications", { exact: true }).waitFor();
-    await page.screenshot({
-      path: path.join(output, "empty-mobile.png"),
-      fullPage: true,
-    });
+  // Sign-up now requires email verification; that flow is covered by test-verification-ui.ts.
+  await test("sign-in opens the combined school app", async () => {
+    const { page, state, close } = await fixture("student", 390, [], false, false);
+    await page.getByRole("textbox", { name: "Email address", exact: true }).waitFor();
+    await page.getByRole("textbox", { name: "Email address", exact: true }).fill("student@example.test");
+    await page.getByRole("textbox", { name: "Password", exact: true }).fill("fixture-password-123");
+    await page.getByRole("button", { name: /^Sign in\s*→$/ }).click();
+    await page.getByText("Hi, Test.", { exact: true }).waitFor();
+    assert.equal(state.signedIn, true);
+    assert(state.calls.some(c => c.endpoint === "/api/auth/sign-in/email"));
     await close();
   });
-  await test("filter switch during delayed mark-read keeps the current filter", async () => {
+  await test("student inbox shows full messages and marks all as read", async () => {
+    const { page, state, close } = await fixture();
+    await page.getByText("School update 1", { exact: true }).waitFor();
+    await page.getByText("Details for update 1.", { exact: false }).waitFor();
+    assert.equal(
+      await page.getByRole("button", { name: "+  Send a school update", exact: true }).count(),
+      0,
+    );
+    assert.equal(state.calls.filter((c) => c.endpoint.endsWith("/recipients")).length, 0);
+    await page.screenshot({ path: path.join(output, "inbox-mobile.png"), fullPage: true });
+    await page.getByRole("button", { name: "Mark all as read", exact: true }).click();
+    await eventually(() => state.rows.every((row) => row.isRead));
+    await eventually(async () => await page.getByRole("button", { name: "Mark all as read", exact: true }).isDisabled());
+    await page.screenshot({ path: path.join(output, "empty-mobile.png"), fullPage: true });
+    await close();
+  });
+  await test("mark all as read is locked while saving and sends one request", async () => {
     const { page, state, close } = await fixture();
     state.readDelay = 600;
-    await page
-      .getByRole("button", { name: "Mark as read", exact: true })
-      .first()
-      .click();
-    await page.getByRole("button", { name: "Unread", exact: true }).click();
-    await eventually(() => state.rows[0].isRead);
-    await page.getByText("1 unread update", { exact: true }).waitFor();
-    assert.equal(
-      await page.getByRole("button", { name: /Open message$/ }).count(),
-      1,
-    );
+    await page.getByRole("button", { name: "Mark all as read", exact: true }).click();
+    await page.getByRole("button", { name: "Updating…", exact: true }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Updating…", exact: true }).isDisabled(), true);
+    await eventually(() => state.rows.every((row) => row.isRead));
+    await eventually(async () => (await page.getByRole("button", { name: "Updating…", exact: true }).count()) === 0);
+    assert.equal(state.calls.filter((c) => c.method === "PATCH").length, 1);
     await close();
   });
   await test("pagination loads 25 + 5 messages without duplicates", async () => {
     const { page, close } = await fixture("student", 390, seed(30));
     await page.getByRole("button", { name: "Load more", exact: true }).click();
-    await page
-      .getByRole("button", {
-        name: "Unread: School update 30. Open message",
-        exact: true,
-      })
-      .waitFor();
-    assert.equal(
-      await page.getByRole("button", { name: /Open message$/ }).count(),
-      30,
-    );
-    assert.equal(
-      await page
-        .getByRole("button", { name: "Load more", exact: true })
-        .count(),
-      0,
-    );
+    await page.getByText("School update 30", { exact: true }).waitFor();
+    assert.equal(await page.getByText(/^School update \d+$/).count(), 30);
+    assert.equal(await page.getByRole("button", { name: "Load more", exact: true }).count(), 0);
     await close();
   });
-  await test("failed inbox refresh can be retried", async () => {
+  await test("failed inbox reload can be retried", async () => {
     const { page, state, close } = await fixture();
     state.failList = true;
-    await page.getByRole("button", { name: "Refresh", exact: true }).click();
-    await page
-      .getByText("Inbox temporarily unavailable", { exact: true })
-      .waitFor();
+    await page.getByRole("button", { name: "Mark all as read", exact: true }).click();
+    await page.getByText("Inbox temporarily unavailable", { exact: true }).waitFor();
     state.failList = false;
     await page.getByRole("button", { name: "Try again", exact: true }).click();
     await eventually(
-      async () =>
-        (await page
-          .getByRole("button", { name: "Try again", exact: true })
-          .count()) === 0,
+      async () => (await page.getByRole("button", { name: "Try again", exact: true }).count()) === 0,
     );
+    await page.getByText("School update 1", { exact: true }).waitFor();
     await close();
   });
   for (const role of ["admin"] as const)
@@ -434,7 +388,8 @@ async function fixture(
       await page
         .getByRole("button", { name: "Back to notifications", exact: true })
         .click();
-      assert.equal(await page.getByRole("button", { name: "Unread: Lesson reminder. Open message", exact: true }).count(), 0);
+      // The announcement goes to another student, so it must not appear in the admin's own inbox.
+      await eventually(async () => (await page.getByText("Lesson reminder", { exact: true }).count()) === 0);
       await close();
     });
   await test("recipient load failure is recoverable", async () => {
@@ -453,30 +408,15 @@ async function fixture(
       .waitFor();
     await close();
   });
-  await test("failed mark-read preserves unread state and supports retry", async () => {
+  await test("failed mark-all preserves unread state and supports retry", async () => {
     const { page, state, close } = await fixture();
     state.failRead = true;
-    await page
-      .getByRole("button", {
-        name: "Unread: School update 1. Open message",
-        exact: true,
-      })
-      .click();
-    await page
-      .getByRole("button", { name: "Mark as read", exact: true })
-      .last()
-      .click();
-    await page
-      .getByText("Could not mark message read", { exact: true })
-      .last()
-      .waitFor();
-    assert.equal(state.rows[0].isRead, false);
+    await page.getByRole("button", { name: "Mark all as read", exact: true }).click();
+    await page.getByText("Could not mark message read", { exact: true }).waitFor();
+    assert.equal(state.rows.some((row) => !row.isRead), true);
     state.failRead = false;
-    await page
-      .getByRole("button", { name: "Mark as read", exact: true })
-      .last()
-      .click();
-    await page.getByText("SCHOOL UPDATE · READ", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "Mark all as read", exact: true }).click();
+    await eventually(() => state.rows.every((row) => row.isRead));
     await close();
   });
   await test("long message remains readable on a 320px viewport", async () => {
@@ -484,20 +424,12 @@ async function fixture(
     rows[0].title = "A".repeat(160);
     rows[0].message = "School update details. ".repeat(220);
     const { page, close } = await fixture("student", 320, rows);
-    await page.getByRole("button", { name: /Open message$/ }).click();
-    await page.getByText("SCHOOL UPDATE · UNREAD", { exact: true }).waitFor();
+    await page.getByText("School update details.", { exact: false }).first().waitFor();
     await screenshot(page, "long-detail-mobile.png");
     assert.equal(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= window.innerWidth,
-      ),
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       true,
     );
-    await page
-      .getByRole("button", { name: "Mark as read", exact: true })
-      .last()
-      .click();
-    await page.getByText("SCHOOL UPDATE · READ", { exact: true }).waitFor();
     await close();
   });
   await test("teacher cannot compose; empty inbox renders", async () => {
