@@ -167,7 +167,7 @@ export function Notifications({ profile, onCount }: { profile: Profile; onCount?
         }
       >
         <Text accessibilityRole="header" style={s.title}>Notifications</Text>
-        {profile.role === "student" && <BrowserNotificationSettings userId={profile.id} promptOnly />}
+        <BrowserNotificationSettings userId={profile.id} promptOnly={profile.role === "student"} />
         {profile.role === "admin" && (
           <Action
             title="+  Send a school update"

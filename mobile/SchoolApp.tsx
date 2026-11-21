@@ -37,6 +37,7 @@ import { Availability } from "./Availability";
 import { Notifications } from "./src/Notifications";
 import { AuditHistory } from "./src/AuditHistory";
 import { useNotificationUpdates } from "./src/useNotificationUpdates";
+import { enableDevicePush, listenForPush } from "./src/devicePush";
 import { RescheduleReview } from "./RescheduleReview";
 
 type Route =

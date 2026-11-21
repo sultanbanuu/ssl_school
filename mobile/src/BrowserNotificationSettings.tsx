@@ -16,7 +16,7 @@ export function BrowserNotificationSettings({ userId, promptOnly = false }: { us
     window.addEventListener("storage", refresh);
     return () => { active = false; window.removeEventListener("school-push-settings", refresh); window.removeEventListener("focus", refresh); window.removeEventListener("storage", refresh); };
   }, [userId]);
-  if (Platform.OS !== "web" || (promptOnly && enabled !== false)) return null;
+  if (promptOnly && enabled !== false) return null;
   const change = async (value: boolean) => {
     setBusy(true);
     try {
@@ -28,9 +28,10 @@ export function BrowserNotificationSettings({ userId, promptOnly = false }: { us
   return <View style={{ backgroundColor: "#272727", borderRadius: 16, padding: 18, marginBottom: 12, gap: 12 }}>
     <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
       <View style={{ flex: 1 }}>
-        <Text style={{ color: "#f5f5f3", fontSize: 17, fontWeight: "700" }}>Browser notifications</Text>
+        <Text style={{ color: "#f5f5f3", fontSize: 17, fontWeight: "700" }}>{Platform.OS === "web" ? "Browser notifications" : "Push notifications"}</Text>
+        {!promptOnly && <Text style={{ color: "#b5b5b5", fontSize: 14, marginTop: 4 }}>{enabled ? "On: you get alerts for new payments, rescheduling requests and school updates." : "Off: alerts are paused. Updates still appear in your inbox."}</Text>}
       </View>
-      {!promptOnly && <Switch accessibilityLabel="Browser notifications" value={enabled === true} disabled={busy || enabled === null} onValueChange={value => void change(value)} trackColor={{ false: "#666", true: "#a49dff" }} />}
+      {!promptOnly && <Switch accessibilityLabel={Platform.OS === "web" ? "Browser notifications" : "Push notifications"} value={enabled === true} disabled={busy || enabled === null} onValueChange={value => void change(value)} trackColor={{ false: "#666", true: "#a49dff" }} />}
     </View>
     {promptOnly && <Pressable accessibilityRole="button" disabled={busy} onPress={() => void change(true)}><Text style={{ color: "#c2baff", fontSize: 16, fontWeight: "700" }}>{busy ? "Enabling notifications…" : "Enable browser notifications"}</Text></Pressable>}
     {!promptOnly && enabled && <Pressable accessibilityRole="button" disabled={busy} onPress={async () => { try { setStatus(await testBrowserNotification(userId)); } catch (error) { setStatus(error instanceof Error ? error.message : "Please try again."); } }}><Text style={{ color: "#c2baff", fontSize: 16 }}>Send test desktop notification</Text></Pressable>}

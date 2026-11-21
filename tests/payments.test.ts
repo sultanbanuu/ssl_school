@@ -30,7 +30,11 @@ function fixture(role: Role | null = "student") {
         student: { id: studentId },
         teacher: null,
       }),
+      findMany: async () => [{ id: "admin-user" }],
     },
+    notification: { createMany: async (args: any) => { record("notify", args); return { count: args.data.length }; } },
+    pushDevice: { findMany: async () => [] },
+    pushDelivery: { createMany: async () => ({ count: 0 }) },
     enrollment: {
       findFirst: async (args: any) => {
         record("eligible", args);
@@ -223,6 +227,10 @@ describe("monthly payment flow", () => {
     expect((await f.request("/api/payments", body)).status).toBe(201);
     expect((await f.request("/api/payments", body)).status).toBe(200);
     expect(f.calls.filter((c) => c.name === "finalize")).toHaveLength(1);
+    const notices = f.calls.filter((c) => c.name === "notify");
+    expect(notices).toHaveLength(1);
+    expect(notices[0].args.data).toMatchObject([{ userId: "admin-user", type: "payment_submitted" }]);
+    expect(notices[0].args.data[0].title).toContain("Ayla Aliyeva");
     expect(f.state.payment.amount.toFixed(2)).toBe("50.00");
     expect(f.calls.find((call) => call.name === "create")!.args.status).toBe(
       "pending",

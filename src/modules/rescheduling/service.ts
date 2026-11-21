@@ -5,6 +5,7 @@ import { checkConflict, dates, reminder, scheduleLock, serialize, storedBounds }
 import { calendarOpenings } from "./calendar";
 import { workingRanges } from "../../teacher-hours";
 import { lessonSchedule, studentName } from "../../shared/lesson-notification";
+import { notifyWithPush } from "../../push-queue";
 
 const OFFSET = 4 * 3600000;
 export function bakuMonth(now: Date) {
@@ -43,7 +44,7 @@ async function quota(tx: Prisma.TransactionClient, id: string) {
   return { used, limit: 3, remaining: Math.max(0, 3 - used), resetsAt: month.end };
 }
 async function notify(tx: Prisma.TransactionClient, users: string[], title: string, message: string, lesson: Booking) {
-  await tx.notification.createMany({ data: [...new Set(users)].map(userId => ({ userId, title: userId === lesson.teacher.profileId ? `${title}: ${studentName(lesson.enrollment.student.profile)}` : title, message, type: "lesson_reschedule" })) });
+  await notifyWithPush(tx, [...new Set(users)].map(userId => ({ userId, title: userId === lesson.teacher.profileId ? `${title}: ${studentName(lesson.enrollment.student.profile)}` : title, message, type: "lesson_reschedule" })));
 }
 async function candidate(tx: Prisma.TransactionClient, lesson: Booking, slotId: string) {
   const slot = await tx.availabilitySlot.findFirst({ where: { id: slotId, teacherId: lesson.teacherId, courseId: lesson.enrollment.courseId, active: true, startsAt: { gt: new Date() } } });

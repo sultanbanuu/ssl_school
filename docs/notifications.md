@@ -6,6 +6,12 @@ Only admins can compose and send announcements. Managers, teachers, and students
 
 Students receive announcements in their private inbox and, after enabling notifications, on registered iOS/Android devices or browsers while the app/tab is closed. Browser builds also show an inbox badge and a floating, dismissible banner that opens the inbox. Existing automatic lesson/rescheduling inbox messages are unchanged.
 
+## Staff alerts (admins, teachers, managers)
+
+Admins get an inbox message and a device/browser push when a student submits a payment receipt ("New payment: <student>") and when a student requests rescheduling or cancels a lesson. Assigned teachers get the rescheduling/cancellation alerts. Decisions and restorations also push to the student and teacher.
+
+Every role has an on/off switch under **Notifications** (staff) or **Profile → Settings** (students). Switching off removes this browser/device registration, so no alerts are pushed; the inbox keeps every message. Switching on asks for system permission and re-registers. The setting is per browser/device. Device registration (`POST /api/notifications/devices`) is now open to every signed-in role; announcements and the recipient list remain admin-only.
+
 ## Browser push and local testing
 
 1. Run `bun scripts/setup-web-push.ts` once to generate server-only VAPID settings in `.env`, then restart the API. For production pass a real contact, e.g. `bun scripts/setup-web-push.ts mailto:admin@your-domain.com` on an unconfigured environment, and set all three `WEB_PUSH_*` variables on the API host. Keep the same keys across restarts. Never expose the private key in an `EXPO_PUBLIC_*` variable.

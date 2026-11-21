@@ -44,6 +44,8 @@ function fixture(role = "admin", actorTeacherId = teacherId) {
       updateMany: async ({ where, data }: any) => { rows.filter(row => matches(row, where)).forEach(row => Object.assign(row, data)); return {}; },
     },
     notification: { createMany: async ({ data }: any) => { notifications.push(...data); return { count: data.length }; } },
+    pushDevice: { findMany: async () => [] },
+    pushDelivery: { createMany: async () => ({ count: 0 }) },
   };
   const db = { ...tx, profile: { findUnique: async () => ({ id: "actor", role, teacher: role === "teacher" ? { id: actorTeacherId } : null }) }, $transaction: async (fn: any) => { const saved = structuredClone(rows), savedNotifications = structuredClone(notifications); try { return await fn(tx); } catch (e) { rows = saved; notifications = savedNotifications; throw e; } } } as unknown as PrismaClient;
   const app = createApp({ db, getSession: async () => ({ user: { id: "admin" } }), authHandler: async () => new Response(), origins: [] }).compile();

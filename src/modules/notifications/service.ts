@@ -11,7 +11,7 @@ import type {
 export function createNotificationService(db: PrismaClient) {
   return {
     async registerDevice(actor: Actor, token: string) {
-      if (actor.role !== "student") throw new HttpError(403, "Student access required");
+      // Students, teachers, managers and admins may all receive device alerts for their own inbox.
       await db.$transaction(async tx => {
         // Discard queued messages before transferring a shared device to a new account.
         await tx.pushDevice.deleteMany({ where: { token, userId: { not: actor.id } } });

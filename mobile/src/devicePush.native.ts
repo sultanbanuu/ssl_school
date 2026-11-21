@@ -6,6 +6,7 @@ import { Platform } from "react-native";
 import { api } from "./api";
 
 const key = "school-push-token";
+const disabledKey = "school-push-disabled";
 let pending: Promise<unknown> = Promise.resolve();
 let generation = 0;
 Notifications.setNotificationHandler({ handleNotification: async () => ({ shouldPlaySound: true, shouldSetBadge: false, shouldShowBanner: true, shouldShowList: true }) });
@@ -14,6 +15,7 @@ export function enableDevicePush(prompt = true): Promise<string> {
   const ticket = generation;
   const operation = pending.catch(() => {}).then(async () => {
     if (ticket !== generation) return "";
+    if (!prompt && await SecureStore.getItemAsync(disabledKey) === "true") return "";
     if (!Device.isDevice || Constants.appOwnership === "expo") return "Push notifications need an installed development or production app on a physical device.";
     const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId ?? process.env.EXPO_PUBLIC_EAS_PROJECT_ID;
     if (!projectId) return "Device notifications are not configured yet. Your school updates are still available in this inbox.";
@@ -31,6 +33,7 @@ export function enableDevicePush(prompt = true): Promise<string> {
     if (previous && previous !== token) await api("/notifications/devices", { token: previous }, "DELETE");
     await SecureStore.setItemAsync(key, token);
     await api("/notifications/devices", { token });
+    await SecureStore.deleteItemAsync(disabledKey);
     return "Device notifications are enabled.";
   });
   pending = operation;
@@ -46,6 +49,23 @@ export async function removeDevicePush() {
     await api("/notifications/devices", { token }, "DELETE");
     await SecureStore.deleteItemAsync(key);
   }
+}
+
+export async function browserPushEnabled(): Promise<boolean> {
+  if (await SecureStore.getItemAsync(disabledKey) === "true" || !await SecureStore.getItemAsync(key)) return false;
+  return (await Notifications.getPermissionsAsync()).granted;
+}
+
+export async function disableBrowserPush(): Promise<string> {
+  await SecureStore.setItemAsync(disabledKey, "true");
+  try { await removeDevicePush(); }
+  catch (error) { await SecureStore.deleteItemAsync(disabledKey); throw error; }
+  return "Notifications are off on this device. Your updates are still available in the inbox.";
+}
+
+export async function testBrowserNotification(_userId: string): Promise<string> {
+  await Notifications.scheduleNotificationAsync({ content: { title: "SSL School test notification", body: "Notifications are working on this device." }, trigger: null });
+  return "Test notification sent.";
 }
 
 export function listenForPush(userId: string, open: () => void) {

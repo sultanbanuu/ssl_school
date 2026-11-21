@@ -90,8 +90,8 @@ describe("Device push delivery", () => {
     const { db } = fixture({}, false);
     await deliverPushNotifications(db, async () => { throw new Error("Must not call provider"); });
   });
-  test("cancels delivery after account transfer or role change", async () => {
-    for (const device of [{ userId: "other", profile: { role: "student" } }, { userId: "student", profile: { role: "admin" } }]) {
+  test("cancels delivery after account transfer", async () => {
+    for (const device of [{ userId: "other", profile: { role: "student" } }]) {
       const { db, writes } = fixture({ device });
       await deliverPushNotifications(db, async () => { throw new Error("Must not call provider"); });
       expect(writes.at(-1).data.status).toBe("cancelled");
@@ -100,12 +100,15 @@ describe("Device push delivery", () => {
 });
 
 describe("Push device ownership", () => {
-  test("only students can register and removal is scoped to the current account", async () => {
+  test("staff can register devices and removal is scoped to the current account", async () => {
     const { db, removed } = fixture();
     const service = createNotificationService(db);
+    (db as any).$transaction = async (work: any) => work(db);
+    (db.pushDevice as any).upsert = async () => {};
     for (const role of ["admin", "manager", "teacher"] as const) {
-      await expect(service.registerDevice({ ...student, role }, token)).rejects.toMatchObject({ status: 403 });
+      expect(await service.registerDevice({ ...student, role }, token)).toEqual({ registered: true });
     }
+    removed.length = 0;
     await service.removeDevice(student, token);
     expect(removed).toEqual([{ where: { token, userId: student.id } }]);
   });
@@ -141,5 +144,23 @@ describe("Push device ownership", () => {
     await createNotificationService(db).send({ ...student, role: "admin" }, { userId: student.id, title: "Title", message: "Message" });
     expect(events).toEqual(["begin", "inbox", "push", "commit"]);
     expect(jobs).toEqual([{ notificationId: "notice", token }]);
+  });
+});
+
+describe("Staff alerts", () => {
+  test("notifyWithPush queues a push only for recipients with registered devices", async () => {
+    const { notifyWithPush } = await import("../src/push-queue");
+    let notes: any[] = []; let jobs: any[] = [];
+    const tx = {
+      notification: { createMany: async (a: any) => { notes = a.data; } },
+      pushDevice: { findMany: async () => [{ userId: "admin-on", token }] },
+      pushDelivery: { createMany: async (a: any) => { jobs = a.data; } },
+    } as any;
+    await notifyWithPush(tx, [
+      { userId: "admin-on", title: "New payment", message: "m", type: "payment_submitted" },
+      { userId: "admin-off", title: "New payment", message: "m", type: "payment_submitted" },
+    ]);
+    expect(notes).toHaveLength(2);
+    expect(jobs).toEqual([{ notificationId: notes[0].id, token }]);
   });
 });

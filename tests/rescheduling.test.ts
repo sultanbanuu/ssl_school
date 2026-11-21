@@ -50,6 +50,8 @@ function fixture() {
     trialRequest: { findFirst: async () => trialConflict ? { id: "trial" } : null, findMany: async () => [] },
     profile: { findMany: async () => [{ id: "admin" }] },
     notification: { createMany: async ({ data }: any) => { notifications.push(...data); return { count: data.length }; } },
+    pushDevice: { findMany: async () => [] },
+    pushDelivery: { createMany: async () => ({ count: 0 }) },
     rescheduleRequest: {
       count: async ({ where }: any) => requests.filter(r => matches(r, where)).length,
       findFirst: async ({ where }: any) => requests.find(r => matches(r, where)) || null,

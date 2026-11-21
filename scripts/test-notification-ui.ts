@@ -257,7 +257,7 @@ async function fixture(
         await close();
         return;
       }
-      await page.getByRole("heading", { name: role === "student" ? "Your lessons" : "Lesson calendar", exact: true }).waitFor();
+      await page.getByRole("heading", { name: (role as string) === "student" ? "Your lessons" : "Lesson calendar", exact: true }).waitFor();
       // Only admins have a Payments entry in staff navigation.
       if (role === "admin") {
         await page.getByRole("button", { name: "Payments", exact: true }).click();
@@ -447,6 +447,29 @@ async function fixture(
     );
     await close();
   });
+  for (const role of ["admin", "teacher"] as const)
+    await test(`${role} can switch notifications on and off`, async () => {
+      const { page, close } = await fixture(role, 1440, []);
+      await page.getByRole("button", { name: /Notifications/ }).first().click();
+      await page.evaluate(() => {
+        Object.defineProperty(Notification, "permission", { configurable: true, get: () => "granted" });
+        localStorage.setItem("school-web-push-token", "web:fixture");
+        let subscribed = true;
+        Object.defineProperty(navigator.serviceWorker, "getRegistration", { configurable: true, value: async () => ({
+          pushManager: { getSubscription: async () => subscribed ? { unsubscribe: async () => { subscribed = false; return true; } } : null },
+          getNotifications: async () => [],
+        }) });
+        window.dispatchEvent(new Event("school-push-settings"));
+      });
+      const toggle = page.getByRole("switch", { name: "Browser notifications", exact: true });
+      await toggle.waitFor();
+      assert.equal(await toggle.isChecked(), true);
+      await toggle.click();
+      await page.getByText("Browser notifications are off. Your updates are still available in the inbox.", { exact: true }).waitFor();
+      assert.equal(await toggle.isChecked(), false);
+      assert.equal(await page.evaluate(() => localStorage.getItem("school-web-push-disabled")), "true");
+      await close();
+    });
   await test("desktop prompt hides when enabled and settings can disable notifications", async () => {
     const { page, close } = await fixture("student", 1440, []);
     await page.getByRole("button", { name: "Enable browser notifications", exact: true }).waitFor();

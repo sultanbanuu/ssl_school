@@ -1,5 +1,6 @@
 import { setAuditActor } from "../../shared/audit";
 import { RECEIPT_CLEANUP_GRACE_MS } from "../../receipt-cleanup";
+import { notifyWithPush } from "../../push-queue";
 import type { z } from "zod";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 import type { ReceiptStorage } from "../../receipt-storage";
@@ -213,6 +214,14 @@ export function createPaymentService(db: PrismaClient, receipts?: ReceiptStorage
             },
           });
           await tx.receiptCleanup.delete({ where: { objectKey: receiptKey } });
+          const admins = await tx.profile.findMany({ where: { role: "admin" }, select: { id: true } });
+          const who = [payment.student.profile.firstName, payment.student.profile.lastName].map(name => name?.trim()).filter(Boolean).join(" ") || "A student";
+          await notifyWithPush(tx, admins.map(admin => ({
+            userId: admin.id,
+            title: `New payment: ${who}`,
+            message: `${who} submitted a receipt for ${payment.courseName ?? "a course"} (${payment.amount.toFixed(2)} AZN). Review it in Payments.`,
+            type: "payment_submitted",
+          })));
           return payment;
         }, { timeout: 30_000, maxWait: 5_000, isolationLevel: "ReadCommitted" });
       // Never delete a final copy in an error handler: a lost commit response may

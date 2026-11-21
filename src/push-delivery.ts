@@ -18,7 +18,7 @@ export async function deliverPushNotifications(db: PrismaClient, fetcher: PushFe
     });
     if (!claim.count) continue;
     const update = (data: { status?: string; ticketId?: string; nextAttemptAt?: Date; attempts?: number }) => db.pushDelivery.updateMany({ where: { id: row.id }, data });
-    if (row.device.userId !== row.notification.userId || row.device.profile.role !== "student") {
+    if (row.device.userId !== row.notification.userId) {
       await update({ status: "cancelled" });
       continue;
     }
