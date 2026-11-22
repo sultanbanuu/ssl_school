@@ -3,7 +3,9 @@ import type { PrismaClient } from "../../generated/prisma/client";
 import type { Actor } from "../../shared/authorization";
 import {
   createEnrollmentBody,
+  idParams,
   listQuery,
+  updateEnrollmentBody,
 } from "./schemas";
 import { createEnrollmentService } from "./service";
 
@@ -28,5 +30,11 @@ export function enrollmentRoutes(
         return result;
       },
       { body: createEnrollmentBody },
+    )
+    .patch(
+      "/api/enrollments/:id",
+      async ({ request, params, body }) =>
+        service.update(await actorFor(request), params.id, body),
+      { params: idParams, body: updateEnrollmentBody },
     );
 }

@@ -106,3 +106,32 @@ test("per-lesson courses require a lesson count at enrollment; monthly courses r
     if (status === 201) expect(written.lessonCount).toBe((body as any).lessonCount);
   }
 });
+
+test("staff can change the lesson count of per-lesson enrollments only", async () => {
+  const enrollmentId = "66666666-6666-4666-8666-666666666666";
+  const cases = [
+    { role: "admin", perLesson: true, teaches: false, body: { lessonCount: 8 }, status: 200 },
+    { role: "teacher", perLesson: true, teaches: true, body: { lessonCount: 8 }, status: 200 },
+    { role: "teacher", perLesson: true, teaches: false, body: { lessonCount: 8 }, status: 404 },
+    { role: "admin", perLesson: false, teaches: false, body: { lessonCount: 8 }, status: 422 },
+    { role: "admin", perLesson: true, teaches: false, body: { lessonCount: 0 }, status: 422 },
+    { role: "student", perLesson: true, teaches: false, body: { lessonCount: 8 }, status: 403 },
+  ];
+  for (const { role, perLesson, teaches, body, status } of cases) {
+    let written: any = null;
+    const db: any = {
+      profile: { findUnique: async () => ({ id: userId, role, teacher: { id: teacherId }, student: { id: studentId } }) },
+      enrollment: {
+        findUnique: async () => ({ id: enrollmentId, course: { perLesson, teacherId: "other", teachers: teaches ? [{ teacherId }] : [] } }),
+        update: async ({ data }: any) => { written = data; return { id: enrollmentId, ...data }; },
+      },
+      $transaction: async (fn: any) => fn(db),
+    };
+    const app = createApp({ db, getSession: async () => ({ user: { id: userId } }), authHandler: async () => new Response(), origins: [] }).compile();
+    const response = await app.handle(new Request(`http://localhost/api/enrollments/${enrollmentId}`, {
+      method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    }));
+    expect(response.status).toBe(status);
+    expect(written).toEqual(status === 200 ? { lessonCount: 8 } : null);
+  }
+});

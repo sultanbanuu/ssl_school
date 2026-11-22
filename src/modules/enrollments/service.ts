@@ -5,7 +5,15 @@ import { HttpError, enrollmentScope, requireStaff, type Actor } from "../../shar
 import type {
   createEnrollmentBody,
   listQuery,
+  updateEnrollmentBody,
 } from "./schemas";
+
+function requireEnrollmentEditor(actor: Actor) {
+  if (actor.role === "teacher") {
+    if (!actor.teacherId)
+      throw new HttpError(403, "Teacher account is incomplete");
+  } else requireStaff(actor);
+}
 
 export function createEnrollmentService(db: PrismaClient) {
   return {
@@ -33,10 +41,7 @@ export function createEnrollmentService(db: PrismaClient) {
       actor: Actor,
       body: z.output<typeof createEnrollmentBody>,
     ) {
-      if (actor.role === "teacher") {
-        if (!actor.teacherId)
-          throw new HttpError(403, "Teacher account is incomplete");
-      } else requireStaff(actor);
+      requireEnrollmentEditor(actor);
       const result = await db.$transaction(async (tx) => {
         const course = await tx.course.findUnique({
           where: { id: body.courseId },
@@ -60,6 +65,30 @@ export function createEnrollmentService(db: PrismaClient) {
         });
       });
       return result;
-    }
+    },
+
+    // Changes the lesson package size of a per-lesson enrollment. Payments already
+    // submitted keep the amount quoted at upload time.
+    async update(
+      actor: Actor,
+      id: string,
+      body: z.output<typeof updateEnrollmentBody>,
+    ) {
+      requireEnrollmentEditor(actor);
+      return db.$transaction(async (tx) => {
+        const enrollment = await tx.enrollment.findUnique({
+          where: { id },
+          include: { course: { include: { teachers: true } } },
+        });
+        if (!enrollment || (actor.role === "teacher" && !hasCourseTeacher(enrollment.course, actor.teacherId!)))
+          throw new HttpError(404, "Enrollment not found");
+        if (!enrollment.course.perLesson)
+          throw new HttpError(422, "This course is paid monthly; lesson count does not apply");
+        return tx.enrollment.update({
+          where: { id },
+          data: { lessonCount: body.lessonCount },
+        });
+      });
+    },
   };
 }

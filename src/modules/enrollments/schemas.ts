@@ -8,4 +8,9 @@ export const createEnrollmentBody = z.strictObject({
   lessonCount: z.number().int().min(1).max(100).optional(),
 });
 
+export const idParams = z.object({ id: z.uuid() });
+export const updateEnrollmentBody = z.strictObject({
+  lessonCount: z.number().int().min(1).max(100),
+});
+
 export const listQuery = pagination;

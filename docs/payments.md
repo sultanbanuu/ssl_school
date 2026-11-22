@@ -23,6 +23,9 @@ All endpoints require the existing session authentication.
    course price per lesson; staff set `lessonCount` (1–100) when creating the
    enrollment, and the quoted upload `amount` is `price × lessonCount`. Uploads
    for a per-lesson enrollment without a lesson count are rejected with 422.
+   Staff (admins, managers, or a teacher of the course) can change the count
+   later with `PATCH /api/enrollments/:id` `{ "lessonCount": n }`; payments
+   already uploaded keep their quoted amount.
 2. `POST /api/payments/uploads` with
    `{ "courseId": "uuid", "contentType": "image/png", "size": 12345 }` creates
    an upload intent and returns `uploadId`, `uploadUrl`, required upload headers,

@@ -31,6 +31,7 @@ type Enrollment = {
   studentId: string;
   teacherId: string;
   courseId: string;
+  lessonCount?: number | null;
   course: { name: string };
   student: { profile: Person };
 };
@@ -357,6 +358,7 @@ function LessonCalendar({
     const enrolled = enrollments.find(
       (e) => e.studentId === studentId && e.courseId === courseId,
     );
+    setLessonCount(enrolled?.lessonCount ? String(enrolled.lessonCount) : "");
     setDraft({
       ...draft,
       studentId,
@@ -368,15 +370,42 @@ function LessonCalendar({
         draft.teacherId,
     });
   }
+  function validLessonCount() {
+    const count = Number(lessonCount);
+    if (Number.isInteger(count) && count >= 1 && count <= 100) return count;
+    setError("Enter a lesson count between 1 and 100.");
+    return null;
+  }
+  async function updateLessonCount() {
+    if (!draft?.enrollmentId || mutation.current) return;
+    const count = validLessonCount();
+    if (count === null) return;
+    mutation.current = true;
+    setSaving(true);
+    setError("");
+    try {
+      const row = await schoolRequest<Enrollment>(
+        `/enrollments/${draft.enrollmentId}`,
+        "PATCH",
+        { lessonCount: count },
+      );
+      setEnrollments((previous) =>
+        previous.map((e) => (e.id === row.id ? { ...e, lessonCount: row.lessonCount } : e)),
+      );
+      setNotice(`Lesson count updated to ${count}.`);
+    } catch (e) {
+      failure(e);
+    } finally {
+      mutation.current = false;
+      setSaving(false);
+    }
+  }
   async function createEnrollment() {
     if (!draft || mutation.current || !draft.studentId || !draft.courseId)
       return;
     const perLesson = courseChoices.find((c) => c.id === draft.courseId)?.perLesson;
-    const count = Number(lessonCount);
-    if (perLesson && !(Number.isInteger(count) && count >= 1 && count <= 100)) {
-      setError("Enter a lesson count between 1 and 100.");
-      return;
-    }
+    const count = perLesson ? validLessonCount() : null;
+    if (perLesson && count === null) return;
     mutation.current = true;
     setSaving(true);
     setError("");
@@ -384,7 +413,7 @@ function LessonCalendar({
       const row = await schoolRequest<Enrollment>("/enrollments", "POST", {
         studentId: draft.studentId,
         courseId: draft.courseId,
-        ...(perLesson ? { lessonCount: count } : {}),
+        ...(perLesson && count !== null ? { lessonCount: count } : {}),
       });
       setEnrollments((previous) => [...previous, row]);
       setDraft((current) =>
@@ -398,6 +427,29 @@ function LessonCalendar({
       mutation.current = false;
       setSaving(false);
     }
+  }
+  function lessonCountField() {
+    const chosen = draft && courseChoices.find((c) => c.id === draft.courseId);
+    if (!chosen?.perLesson) return null;
+    const count = Number(lessonCount);
+    return (
+      <label className="enrollment-label">
+        Number of lessons
+        <input
+          type="number"
+          min={1}
+          max={100}
+          step={1}
+          inputMode="numeric"
+          aria-label="Number of lessons"
+          value={lessonCount}
+          onChange={(e) => setLessonCount(e.target.value)}
+        />
+        {Number.isInteger(count) && count > 0 && (
+          <span>Total: {(count * Number(chosen.price)).toFixed(2)} ₼ ({count} × {Number(chosen.price)} ₼)</span>
+        )}
+      </label>
+    );
   }
   function openNew(date = schoolToday(), time = "10:00", endMinute?: number, onlyEnroll = false) {
     setEnrollmentOnly(onlyEnroll);
@@ -1139,33 +1191,27 @@ function LessonCalendar({
                     draft.studentId &&
                     draft.courseId &&
                     (draft.enrollmentId ? (
-                      <p>Student is enrolled in this course.</p>
+                      <div>
+                        <p>Student is enrolled in this course.</p>
+                        {lessonCountField() && (
+                          <>
+                            {lessonCountField()}
+                            <button
+                              type="button"
+                              disabled={
+                                String(enrollments.find((e) => e.id === draft.enrollmentId)?.lessonCount ?? "") === lessonCount
+                              }
+                              onClick={() => void updateLessonCount()}
+                            >
+                              Save lesson count
+                            </button>
+                          </>
+                        )}
+                      </div>
                     ) : (
                       <div>
                         <p>This student is not enrolled in this course yet.</p>
-                        {(() => {
-                          const chosen = courseChoices.find((c) => c.id === draft.courseId);
-                          if (!chosen?.perLesson) return null;
-                          const count = Number(lessonCount);
-                          return (
-                            <label className="enrollment-label">
-                              Number of lessons
-                              <input
-                                type="number"
-                                min={1}
-                                max={100}
-                                step={1}
-                                inputMode="numeric"
-                                aria-label="Number of lessons"
-                                value={lessonCount}
-                                onChange={(e) => setLessonCount(e.target.value)}
-                              />
-                              {Number.isInteger(count) && count > 0 && (
-                                <span>Total: {(count * Number(chosen.price)).toFixed(2)} ₼ ({count} × {Number(chosen.price)} ₼)</span>
-                              )}
-                            </label>
-                          );
-                        })()}
+                        {lessonCountField()}
                         <button
                           type="button"
                           onClick={() => void createEnrollment()}
