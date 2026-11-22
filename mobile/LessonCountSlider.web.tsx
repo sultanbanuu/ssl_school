@@ -11,7 +11,7 @@ export function LessonCountSlider({ label, value, max, onChange }: Props) {
       max={max}
       value={value}
       onChange={(event) => onChange(Number(event.currentTarget.value))}
-      style={{ display: "block", width: "100%", height: 44, margin: 0, accentColor: "#bce6d1", cursor: "pointer", touchAction: "pan-y" }}
+      style={{ display: "block", width: "100%", height: 44, margin: 0, outline: "none", accentColor: "#bce6d1", cursor: "pointer", touchAction: "pan-y" }}
     />
   );
 }

@@ -11,3 +11,4 @@ dist/
 .expo
 tmp/
 mobile/dist*/
+.tmp/
