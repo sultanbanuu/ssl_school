@@ -82,3 +82,27 @@ test("teachers enroll students only in their own active courses", async () => {
     if (own) expect((await response.json()).teacherId).toBe(teacherId);
   }
 });
+
+test("per-lesson courses require a lesson count at enrollment; monthly courses reject it", async () => {
+  const cases = [
+    { perLesson: true, body: {}, status: 422 },
+    { perLesson: true, body: { lessonCount: 0 }, status: 422 },
+    { perLesson: true, body: { lessonCount: 12 }, status: 201 },
+    { perLesson: false, body: { lessonCount: 12 }, status: 422 },
+    { perLesson: false, body: {}, status: 201 },
+  ];
+  for (const { perLesson, body, status } of cases) {
+    let written: any = null;
+    const db: any = {
+      profile: { findUnique: async () => ({ id: userId, role: "admin" }) },
+      course: { findUnique: async () => ({ id: courseId, active: true, perLesson, teacherId }) },
+      student: { findUnique: async () => ({ id: studentId, status: "active" }) },
+      enrollment: { create: async ({ data }: any) => { written = data; return data; } },
+      $transaction: async (fn: any) => fn(db),
+    };
+    const app = createApp({ db, getSession: async () => ({ user: { id: userId } }), authHandler: async () => new Response(), origins: [] }).compile();
+    const response = await app.handle(request("/api/enrollments", { studentId, courseId, ...body }));
+    expect(response.status).toBe(status);
+    if (status === 201) expect(written.lessonCount).toBe((body as any).lessonCount);
+  }
+});

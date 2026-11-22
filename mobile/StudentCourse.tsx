@@ -9,7 +9,6 @@ import { baseURL, money } from "./src/api";
 export type Course = { id: string; name: string; price: string; description?: string | null };
 
 const maxLessons = 30;
-const lessonPrice = 13;
 
 export function StudentCourse({ course, onTrial, enrolled, count, onCountChange }: {
   course: Course;
@@ -20,6 +19,8 @@ export function StudentCourse({ course, onTrial, enrolled, count, onCountChange 
 }) {
   const details = courseDetails(course.name);
   const accent = details?.accent ?? "#bdb7ff";
+  // Custom packages are priced per lesson from the course record.
+  const lessonPrice = Number(course.price);
   const wide = useWindowDimensions().width >= 760;
   const [syllabusError, setSyllabusError] = useState("");
 

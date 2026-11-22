@@ -614,10 +614,16 @@ export function NewPayment({ done }: { done: (id: string) => void }) {
           >
             <View style={s.row}>
               <Text style={s.course}>{c.name}</Text>
-              <Text style={s.amount}>{money(c.monthlyPrice)}</Text>
+              <Text style={s.amount}>
+                {c.perLesson ? (c.amount ? money(c.amount) : "—") : money(c.monthlyPrice)}
+              </Text>
             </View>
             <Text style={[s.small, course?.courseId === c.courseId && { color: "#f5f5f3" }]}>
-              One calendar month{" "}
+              {c.perLesson
+                ? c.lessonCount
+                  ? `${c.lessonCount} ${c.lessonCount === 1 ? "lesson" : "lessons"} × ${money(c.monthlyPrice)}`
+                  : "Lesson count not set yet — ask your teacher"
+                : "One calendar month"}{" "}
               {course?.courseId === c.courseId ? " • Selected" : ""}
             </Text>
           </Pressable>

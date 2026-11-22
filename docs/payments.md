@@ -17,7 +17,12 @@ notification service is included.
 All endpoints require the existing session authentication.
 
 1. `GET /api/payments/courses` lists the student's eligible courses and
-   `monthlyPrice` decimal string. Supports `limit` and `offset`.
+   `monthlyPrice` decimal string, plus `perLesson`, `lessonCount` and the
+   `amount` due. Supports `limit` and `offset`.
+   Per-lesson courses (`courses.per_lesson`, e.g. English in Context) store the
+   course price per lesson; staff set `lessonCount` (1–100) when creating the
+   enrollment, and the quoted upload `amount` is `price × lessonCount`. Uploads
+   for a per-lesson enrollment without a lesson count are rejected with 422.
 2. `POST /api/payments/uploads` with
    `{ "courseId": "uuid", "contentType": "image/png", "size": 12345 }` creates
    an upload intent and returns `uploadId`, `uploadUrl`, required upload headers,

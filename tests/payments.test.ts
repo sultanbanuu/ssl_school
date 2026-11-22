@@ -20,6 +20,7 @@ function fixture(role: Role | null = "student") {
     failFinalize: false,
     failCreate: false,
     role,
+    enrollment: null as any,
   };
   const record = (name: string, args: any) => calls.push({ name, args });
   const db: any = {
@@ -39,7 +40,7 @@ function fixture(role: Role | null = "student") {
       findFirst: async (args: any) => {
         record("eligible", args);
         return state.eligible
-          ? { course: { name: "English", price: new Prisma.Decimal("50") } }
+          ? state.enrollment ?? { course: { name: "English", price: new Prisma.Decimal("50") } }
           : null;
       },
       findMany: async (args: any) => {
@@ -219,6 +220,17 @@ describe("monthly payment flow", () => {
     const response = await f.upload();
     expect(response.status).toBe(201);
     expect((await response.json()).amount).toBe("50.00");
+  });
+  test("per-lesson courses charge price times the enrolled lesson count", async () => {
+    const f = fixture();
+    const course = { name: "English in Context", price: new Prisma.Decimal("16"), perLesson: true };
+    f.state.enrollment = { course, lessonCount: 10 };
+    const response = await f.upload();
+    expect(response.status).toBe(201);
+    expect((await response.json()).amount).toBe("160.00");
+    f.state.upload = null;
+    f.state.enrollment = { course, lessonCount: null };
+    expect((await f.upload()).status).toBe(422);
   });
   test("submission snapshots price and is idempotent by upload id", async () => {
     const f = fixture();

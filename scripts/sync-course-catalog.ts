@@ -42,6 +42,7 @@ try {
       await tx.course.create({
         data: {
           name: item.name, category: item.category, price: item.price,
+          perLesson: "perLesson" in item && item.perLesson,
           teacherId: teachers[0]!.teacherId, teachers: { create: teachers },
         },
       });

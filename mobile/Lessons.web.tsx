@@ -35,7 +35,7 @@ type Enrollment = {
   student: { profile: Person };
 };
 type Student = SchedulingStudent;
-type Course = { id: string; name: string; active: boolean; teacherId: string };
+type Course = { id: string; name: string; active: boolean; teacherId: string; price: string; perLesson?: boolean };
 type Lesson = Omit<Schedule, "endTime"> & {
   endTime: string | null;
   id: string;
@@ -177,6 +177,7 @@ function LessonCalendar({
   const [notice, setNotice] = useState("");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [enrollmentOnly, setEnrollmentOnly] = useState(false);
+  const [lessonCount, setLessonCount] = useState("");
   const [students, setStudents] = useState<Student[]>([]);
   const [courseChoices, setCourseChoices] = useState<Course[]>([]);
   const [directoryLoading, setDirectoryLoading] = useState(false);
@@ -370,6 +371,12 @@ function LessonCalendar({
   async function createEnrollment() {
     if (!draft || mutation.current || !draft.studentId || !draft.courseId)
       return;
+    const perLesson = courseChoices.find((c) => c.id === draft.courseId)?.perLesson;
+    const count = Number(lessonCount);
+    if (perLesson && !(Number.isInteger(count) && count >= 1 && count <= 100)) {
+      setError("Enter a lesson count between 1 and 100.");
+      return;
+    }
     mutation.current = true;
     setSaving(true);
     setError("");
@@ -377,6 +384,7 @@ function LessonCalendar({
       const row = await schoolRequest<Enrollment>("/enrollments", "POST", {
         studentId: draft.studentId,
         courseId: draft.courseId,
+        ...(perLesson ? { lessonCount: count } : {}),
       });
       setEnrollments((previous) => [...previous, row]);
       setDraft((current) =>
@@ -393,6 +401,7 @@ function LessonCalendar({
   }
   function openNew(date = schoolToday(), time = "10:00", endMinute?: number, onlyEnroll = false) {
     setEnrollmentOnly(onlyEnroll);
+    setLessonCount("");
     if (!editable || saving) return;
     setError("");
     setDraft({
@@ -1134,6 +1143,29 @@ function LessonCalendar({
                     ) : (
                       <div>
                         <p>This student is not enrolled in this course yet.</p>
+                        {(() => {
+                          const chosen = courseChoices.find((c) => c.id === draft.courseId);
+                          if (!chosen?.perLesson) return null;
+                          const count = Number(lessonCount);
+                          return (
+                            <label className="enrollment-label">
+                              Number of lessons
+                              <input
+                                type="number"
+                                min={1}
+                                max={100}
+                                step={1}
+                                inputMode="numeric"
+                                aria-label="Number of lessons"
+                                value={lessonCount}
+                                onChange={(e) => setLessonCount(e.target.value)}
+                              />
+                              {Number.isInteger(count) && count > 0 && (
+                                <span>Total: {(count * Number(chosen.price)).toFixed(2)} ₼ ({count} × {Number(chosen.price)} ₼)</span>
+                              )}
+                            </label>
+                          );
+                        })()}
                         <button
                           type="button"
                           onClick={() => void createEnrollment()}

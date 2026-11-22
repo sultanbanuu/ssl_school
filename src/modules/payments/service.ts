@@ -66,6 +66,14 @@ function serialize(payment: PaymentWithStudent, actor?: Actor) {
       : [],
   };
 }
+type EnrollmentWithCourse = Prisma.EnrollmentGetPayload<{ include: { course: true } }>;
+// Per-lesson courses charge price × the lesson count set at enrollment; others charge the monthly price.
+function amountDue({ course, lessonCount }: EnrollmentWithCourse) {
+  if (!course.perLesson) return course.price;
+  if (!lessonCount)
+    throw new HttpError(422, "Ask your teacher to set the lesson count for this course");
+  return course.price.mul(lessonCount);
+}
 export function createPaymentService(db: PrismaClient, receipts?: ReceiptStorage) {
   function storage() {
     if (!receipts)
@@ -100,10 +108,15 @@ export function createPaymentService(db: PrismaClient, receipts?: ReceiptStorage
         take: query.limit,
         skip: query.offset,
       });
-      return records.map(({ course }) => ({
+      return records.map(({ course, lessonCount }) => ({
         courseId: course.id,
         name: course.name,
         monthlyPrice: course.price.toFixed(2),
+        perLesson: course.perLesson,
+        lessonCount,
+        amount: course.perLesson
+          ? lessonCount ? course.price.mul(lessonCount).toFixed(2) : null
+          : course.price.toFixed(2),
       }));
     },
     async createUpload(actor: Actor, body: z.output<typeof createUploadBody>) {
@@ -143,7 +156,7 @@ export function createPaymentService(db: PrismaClient, receipts?: ReceiptStorage
             objectKey,
             contentType: body.contentType,
             size: body.size,
-            amount: enrollment.course.price,
+            amount: amountDue(enrollment),
             courseName: enrollment.course.name,
             expiresAt,
             cleanupJobs: { create: { objectKey, kind: "staging", nextAttemptAt: new Date(+expiresAt + RECEIPT_CLEANUP_GRACE_MS) } },

@@ -46,6 +46,10 @@ export function createEnrollmentService(db: PrismaClient) {
           throw new HttpError(404, "Course not found");
         if (!course?.active)
           throw new HttpError(422, "Select an active course");
+        if (course.perLesson && body.lessonCount === undefined)
+          throw new HttpError(422, "Enter the number of lessons for this course");
+        if (!course.perLesson && body.lessonCount !== undefined)
+          throw new HttpError(422, "This course is paid monthly; lesson count does not apply");
         const student = await tx.student.findUnique({
           where: { id: body.studentId },
         });
