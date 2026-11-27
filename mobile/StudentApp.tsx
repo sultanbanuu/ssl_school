@@ -1,4 +1,4 @@
-import MascotLoader from "./MascotLoader";
+import MascotLoader, { ScreenFade } from "./MascotLoader";
 import { SwipeBack } from "./SwipeBack";
 import { BackIcon } from "./CourseIcon";
 import { SchoolIcon } from "./SchoolIcon";
@@ -484,7 +484,8 @@ function StudentShell({
         </Text>
       )}
 
-      <View
+      <ScreenFade
+        key={screen}
         style={{
           flex: 1,
           paddingBottom: screen === "Today" || screen === "availability" ? 0 : 96 + insets.bottom,
@@ -844,7 +845,7 @@ function StudentShell({
             )}
           </View>
         )}
-      </View>
+      </ScreenFade>
 
       {updates.banner && screen !== "notifications" && (
         <View

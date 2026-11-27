@@ -1,4 +1,4 @@
-import MascotLoader from "./MascotLoader";
+import MascotLoader, { isFirstEntry, ScreenFade, SLOW_MS, useSlow } from "./MascotLoader";
 import { phoneSchema } from "../src/shared/phone";
 import React, { lazy, Suspense, useEffect, useState } from "react";
 import * as Linking from "expo-linking";
@@ -32,6 +32,8 @@ const authColumnGap = 40;
 const authMaxWidth = 1060;
 const scoreCardsAspectRatio = 16 / 9;
 const OPENING_MIN_MS = 2500;
+// Decided once when the app script loads, so re-renders can't change it.
+const FIRST_ENTRY = isFirstEntry();
 export default function App() {
   const [mode, setMode] = useState<"signup" | "signin" | "verify" | "forgot" | "reset">("signin");
   const [resetToken, setResetToken] = useState("");
@@ -55,9 +57,11 @@ export default function App() {
   const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
   const [checking, setChecking] = useState(true);
-  // Keep the opening mascot loader up for about 2.5 seconds, even when the session check is quick.
-  const [introDone, setIntroDone] = useState(false);
+  // On the first visit, keep the opening mascot loader up for about 2.5 seconds even when the session check is quick.
+  // Later visits in the same tab skip it unless loading is slow.
+  const [introDone, setIntroDone] = useState(!FIRST_ENTRY);
   useEffect(() => {
+    if (!FIRST_ENTRY) return;
     const elapsed = typeof performance !== "undefined" ? performance.now() : 0;
     const timer = setTimeout(() => setIntroDone(true), Math.max(0, OPENING_MIN_MS - elapsed));
     return () => clearTimeout(timer);
@@ -285,27 +289,34 @@ export default function App() {
     setConfirm("");
   }
 
-  // While a sign-in request is in flight, show the full mascot loader instead of a small button spinner.
-  const signingIn = busy && mode === "signin" && !signedIn;
-  if (checking || !introDone || signingIn || (signedIn && busy && !profile && !error)) return <OpeningSchool />;
+  // Signing in or opening the profile only switches to the full mascot loader when the network is slow.
+  const authWaiting = (busy && mode === "signin" && !signedIn) || (signedIn && busy && !profile && !error);
+  const slowAuth = useSlow(authWaiting);
+  const slowCheck = useSlow(checking);
+  if (!introDone) return <OpeningSchool delay={0} />;
+  if (checking) return slowCheck ? <OpeningSchool delay={0} /> : <View style={s.page} />;
+  if (slowAuth) return <OpeningSchool delay={0} />;
 
   if (signedIn && profile && !recovery) {
     const SchoolApp = profile.role === "student" ? StudentApp : StaffSchoolApp;
     return (
-      <Suspense fallback={<OpeningSchool />}>
-        <SchoolApp
-          key={profile.id}
-          profile={profile}
-          onSignOut={logout}
-          busy={busy}
-          error={error}
-          onFailure={handleFailure}
-        />
+      <Suspense fallback={<OpeningSchool delay={SLOW_MS} />}>
+        <ScreenFade style={{ flex: 1 }}>
+          <SchoolApp
+            key={profile.id}
+            profile={profile}
+            onSignOut={logout}
+            busy={busy}
+            error={error}
+            onFailure={handleFailure}
+          />
+        </ScreenFade>
       </Suspense>
     );
   }
 
   return (
+    <ScreenFade key={mode} style={[s.page, { flex: 1 }]}>
     <KeyboardAvoidingView
       style={s.page}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -582,13 +593,14 @@ export default function App() {
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+    </ScreenFade>
   );
 }
-function OpeningSchool() {
+function OpeningSchool({ delay }: { delay: number }) {
   return (
     <View style={[s.page, s.loading]}>
       <StatusBar barStyle="light-content" />
-      <MascotLoader size="large" label="Loading" accessibilityLabel="Opening SSL School" />
+      <MascotLoader size="large" label="Loading" accessibilityLabel="Opening SSL School" delay={delay} />
     </View>
   );
 }

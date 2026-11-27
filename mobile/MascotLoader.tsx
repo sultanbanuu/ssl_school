@@ -6,13 +6,58 @@ const native = Platform.OS !== "web";
 const HOP_MS = 1500;
 const DOT_MS = 420;
 
+/** Loads faster than this get no loader at all, just a smooth fade-in of the content. */
+export const SLOW_MS = 600;
+const SEEN_KEY = "ssl-loader-seen";
+
 type Props = {
   /** Word shown under the mascot. Dots are animated after it. */
   label?: string;
   /** "large" for full-screen loading, "small" for inline section loading. */
   size?: "large" | "small";
   accessibilityLabel?: string;
+  /** How long loading must last before the mascot appears. 0 shows it straight away. */
+  delay?: number;
 };
+
+let seenThisLaunch = false;
+/** True only for the first visit in this browser tab (web) or app launch (native). Marks it seen. */
+export function isFirstEntry() {
+  if (seenThisLaunch) return false;
+  seenThisLaunch = true;
+  if (Platform.OS !== "web") return true;
+  try {
+    if (globalThis.sessionStorage?.getItem(SEEN_KEY)) return false;
+    globalThis.sessionStorage?.setItem(SEEN_KEY, "1");
+  } catch {}
+  return true;
+}
+
+/** Becomes true once `active` has stayed true for `delay` ms — i.e. the network is being slow. */
+export function useSlow(active: boolean, delay = SLOW_MS) {
+  const [slow, setSlow] = useState(active && delay <= 0);
+  useEffect(() => {
+    if (!active) { setSlow(false); return; }
+    if (delay <= 0) { setSlow(true); return; }
+    const timer = setTimeout(() => setSlow(true), delay);
+    return () => clearTimeout(timer);
+  }, [active, delay]);
+  return slow;
+}
+
+/** Fades and slides its content in when it mounts. Give it a `key` per screen to animate screen changes. */
+export function ScreenFade({ children, style, duration = 280 }: { children: React.ReactNode; style?: React.ComponentProps<typeof View>["style"]; duration?: number }) {
+  const reduce = useReduceMotion();
+  const progress = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (reduce) { progress.setValue(1); return; }
+    const anim = Animated.timing(progress, { toValue: 1, duration, easing: Easing.out(Easing.cubic), useNativeDriver: native });
+    anim.start();
+    return () => anim.stop();
+  }, [reduce, progress, duration]);
+  const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [8, 0] });
+  return <Animated.View style={[{ opacity: progress, transform: [{ translateY }] }, style]}>{children}</Animated.View>;
+}
 
 function useReduceMotion() {
   const [reduce, setReduce] = useState(false);
@@ -25,7 +70,14 @@ function useReduceMotion() {
   return reduce;
 }
 
-export default function MascotLoader({ label = "Loading", size = "small", accessibilityLabel }: Props) {
+/** Shows the mascot only when loading turns out to be slow; quick loads show nothing. */
+export default function MascotLoader({ delay = SLOW_MS, ...props }: Props) {
+  const slow = useSlow(true, delay);
+  if (!slow) return null;
+  return <ScreenFade duration={delay > 0 ? 220 : 0}><LoaderBody {...props} /></ScreenFade>;
+}
+
+function LoaderBody({ label = "Loading", size = "small", accessibilityLabel }: Omit<Props, "delay">) {
   const reduce = useReduceMotion();
   const hop = useRef(new Animated.Value(0)).current;
   const dots = useRef([0, 1, 2].map(() => new Animated.Value(0))).current;

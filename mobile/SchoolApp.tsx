@@ -1,4 +1,4 @@
-import MascotLoader from "./MascotLoader";
+import MascotLoader, { ScreenFade } from "./MascotLoader";
 import { BackIcon } from "./CourseIcon";
 import { studentContentWidth } from "./student-layout";
 import { StatusBadge } from "./StatusBadge";
@@ -225,6 +225,7 @@ export function StaffSchoolApp({
             </Pressable>
           </View>
           <Notice text={error} />
+          <ScreenFade key={route.name + ("id" in route ? `:${route.id}` : "")} style={{ flex: 1 }}>
           {route.name === "audit" ? (profile.role === "admin" ? <AuditHistory /> : <Notice text="Admin access required." />) : route.name === "performance" ? <Performance profile={profile} onFailure={onFailure} /> : route.name === "availability" ? (
             <ScrollView
               keyboardShouldPersistTaps="handled"
@@ -295,6 +296,7 @@ export function StaffSchoolApp({
               )}
             </>
           )}
+          </ScreenFade>
           {profile &&
             notificationUpdates.banner &&
             route.name !== "notifications" && (
