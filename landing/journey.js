@@ -5,7 +5,7 @@ const questionCards = [
   { text: 'Özünü digərlərinə başqa dildə ifadə etmək çətin gəlir?', paper: '#f7c4b0' },
   { text: 'Dinləyirsən, başa düşürsən, amma cavab verə bilmirsən?', paper: '#c8e8de' },
   { text: 'Dərsə vaxt ayıra bilməmək, gedişatı izləyə bilməmək və daha bir çoxu…', paper: '#cbdfff' },
-  { text: 'Dil öyrənmək bu qədər problemidir bəyəm…?', paper: '#f8d486' },
+  { text: 'Dil öyrənmək bu qədər problemlidir bəyəm…?', paper: '#f8d486' },
   {
     text: 'Amma unutma ki, hər problemin bir həll yolu var',
     mission: 'İşimiz elə budur:',
