@@ -22,6 +22,7 @@ type Lesson = {
   endTime: string | null;
   status: "scheduled" | "cancelled" | "completed";
   rescheduledAt?: string | null;
+  rescheduleRequests?: { id: string; status: string }[];
   enrollment: {
     course: { name: string };
     student: { profile: { firstName: string | null; lastName: string | null } };
@@ -39,22 +40,26 @@ const pageSize = 25;
 export function Lessons({
   role,
   onFailure,
+  onReviewRequest,
 }: {
   role: string;
   onFailure: (error: unknown) => void;
+  onReviewRequest?: (id: string) => void;
 }) {
   return role === "student" ? (
     <StudentLessons onFailure={onFailure} />
   ) : (
-    <StaffLessons role={role} onFailure={onFailure} />
+    <StaffLessons role={role} onFailure={onFailure} onReviewRequest={onReviewRequest} />
   );
 }
 function StaffLessons({
   role,
   onFailure,
+  onReviewRequest,
 }: {
   role: string;
   onFailure: (error: unknown) => void;
+  onReviewRequest?: (id: string) => void;
 }) {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
@@ -379,6 +384,11 @@ function StaffLessons({
               .join(" ") || "Teacher"}
           </Text>
           <LessonBadge lesson={lesson} />
+          {onReviewRequest && lesson.rescheduleRequests?.filter(request => request.status === "pending").map(request => (
+            <React.Fragment key={request.id}>
+              {button("Review rescheduling request", () => onReviewRequest(request.id))}
+            </React.Fragment>
+          ))}
           {button("Delete lesson", () =>
             Alert.alert(
               "Delete lesson?",

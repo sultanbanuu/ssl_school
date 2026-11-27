@@ -159,6 +159,15 @@ export function StaffSchoolApp({
   const notificationUpdates = useNotificationUpdates(profile?.id);
   const [route, setRoute] = useState<Route>({ name: "lessons" });
   const [revision, setRevision] = useState(0);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [focusedRequest, setFocusedRequest] = useState<string | null>(null);
+  const lessonScroll = useRef<React.ComponentRef<typeof ScrollView>>(null);
+  const canReviewRequests = profile.role === "admin" || profile.role === "teacher";
+  const reviewRequest = (id: string) => {
+    setFocusedRequest(id);
+    setReviewOpen(true);
+    requestAnimationFrame(() => lessonScroll.current?.scrollTo({ y: 0, animated: true }));
+  };
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       if (route.name === "history" || route.name === "lessons") return false;
@@ -228,14 +237,26 @@ export function StaffSchoolApp({
             </ScrollView>
           ) : route.name === "lessons" ? (
             <ScrollView
+              ref={lessonScroll}
+              keyboardShouldPersistTaps="handled"
               contentContainerStyle={[
                 s.content,
                 Platform.OS === "web" &&
                   profile.role !== "student" && { maxWidth: 1500 },
               ]}
             >
-              {(profile.role === "admin" || profile.role === "teacher") && <RescheduleReview role={profile.role} onFailure={onFailure} onChanged={() => setRevision(v => v + 1)} />}
-              <Lessons key={revision} role={profile.role} onFailure={onFailure} />
+              {canReviewRequests && <RescheduleReview
+                admin={profile.role === "admin"}
+                open={reviewOpen}
+                focusedRequest={focusedRequest}
+                onToggle={() => {
+                  setFocusedRequest(null);
+                  setReviewOpen(!reviewOpen);
+                }}
+                onFailure={onFailure}
+                onChanged={() => setRevision(v => v + 1)}
+              />}
+              <Lessons key={revision} role={profile.role} onFailure={onFailure} onReviewRequest={canReviewRequests ? reviewRequest : undefined} />
             </ScrollView>
           ) : route.name === "notifications" ? (
             <Notifications

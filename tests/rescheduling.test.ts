@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { bakuMonth, createReschedulingService } from "../src/modules/rescheduling/service";
+import { reschedulingRoutes } from "../src/modules/rescheduling/routes";
 import { dates, serialize } from "../src/modules/lessons/service";
 import type { Actor } from "../src/shared/authorization";
 import type { PrismaClient } from "../src/generated/prisma/client";
@@ -54,15 +55,15 @@ function fixture() {
     pushDelivery: { createMany: async () => ({ count: 0 }) },
     rescheduleRequest: {
       count: async ({ where }: any) => requests.filter(r => matches(r, where)).length,
-      findFirst: async ({ where }: any) => requests.find(r => matches(r, where)) || null,
+      findFirst: async ({ where }: any) => requests.map(r => ({ ...r, lesson: lessons.find(l => l.id === r.lessonId) })).find(r => matches(r, where)) || null,
       findUnique: async ({ where }: any) => requests.find(r => r.id === where.id) || null,
-      findMany: async (args: any) => many(requests, args).map(r => ({ ...r, lesson: lessons.find(l => l.id === r.lessonId) })),
+      findMany: async (args: any) => many(requests.map(r => ({ ...r, lesson: lessons.find(l => l.id === r.lessonId) })), args),
       create: async ({ data }: any) => { const r = { id: crypto.randomUUID(), createdAt: new Date(), status: "pending", quotaWaived: false, ...data }; requests.push(r); return r; },
       update: async ({ where, data }: any) => { const r = requests.find(r => r.id === where.id); Object.assign(r, data); return r; },
       updateMany: async ({ where, data }: any) => { const rows = requests.filter(r => matches(r, where)); rows.forEach(r => Object.assign(r, data)); return { count: rows.length }; },
     },
   };
-  return { s: createReschedulingService(db as PrismaClient), lessons, slots, requests, notifications, trial: () => { trialConflict = true; } };
+  return { db: db as PrismaClient, s: createReschedulingService(db as PrismaClient), lessons, slots, requests, notifications, trial: (conflict = true) => { trialConflict = conflict; } };
 }
 test("Baku monthly boundary rolls over at 20:00 UTC and handles year rollover", () => {
   expect(bakuMonth(new Date("2026-10-31T19:59:59Z")).end.toISOString()).toBe("2026-10-31T20:00:00.000Z");
@@ -115,6 +116,41 @@ test("ownership, assigned teacher, and manager restrictions protect requests", a
   await expect(f.s.review({ ...teacher, teacherId: "other" }, r.id, "approved")).rejects.toThrow("not found");
   await expect(f.s.review({ ...admin, role: "manager" }, r.id, "approved")).rejects.toThrow("Teacher or admin");
   expect(await f.s.list({ ...student, studentId: "other" }, 0)).toHaveLength(0);
+});
+test("a reassigned lesson's request follows the current teacher, who can approve a different time", async () => {
+  const f = fixture();
+  const request = await f.s.request(student, "lesson", "slot");
+  const currentTeacher: Actor = { ...teacher, id: "new-teacher-profile", teacherId: "new-teacher" };
+  Object.assign(f.lessons[0], { teacherId: currentTeacher.teacherId, teacher: { profileId: currentTeacher.id } });
+  expect(await f.s.list(teacher, 0)).toEqual([]);
+  await expect(f.s.review(teacher, request.id, "rejected")).rejects.toThrow("Request not found");
+  const app = reschedulingRoutes(f.db, async () => currentTeacher).compile();
+  const requestUrl = "http://localhost/api/reschedule-requests";
+  const listPending = () => app.handle(new Request(`${requestUrl}?status=pending&offset=0`));
+  const pending = await listPending();
+  expect(pending.status).toBe(200);
+  expect(await pending.json()).toMatchObject([{ id: request.id, status: "pending" }]);
+
+  const options = await f.s.options(student, "lesson", 7);
+  const start = options.items[0]!.startsAt;
+  f.trial();
+  await expect(f.s.review(currentTeacher, request.id, "approved", undefined, start.toISOString())).rejects.toThrow("trial");
+  expect(f.requests[0].status).toBe("pending");
+  expect(serialize(f.lessons[0]).date).toBe("2099-11-02");
+  f.trial(false);
+  const approval = await app.handle(new Request(`${requestUrl}/${request.id}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ status: "approved", note: "Confirmed with student", startsAt: start.toISOString() }),
+  }));
+  expect(approval.status).toBe(200);
+  expect(await approval.json()).toMatchObject({ status: "approved", startsAt: start.toISOString(), endsAt: new Date(+start + 3600000).toISOString(), slotId: null, reviewedBy: currentTeacher.id, reviewNote: "Confirmed with student" });
+  const baku = new Date(+start + 4 * 3600000).toISOString();
+  expect(serialize(f.lessons[0])).toMatchObject({ date: baku.slice(0, 10), startTime: baku.slice(11, 16) });
+  expect(await (await listPending()).json()).toEqual([]);
+  const outcome = f.notifications.find(n => n.userId === student.id && n.title === "Rescheduling approved");
+  expect(outcome?.message).toContain("Requested: 2099-11-04 · 12:00–13:00 (Asia/Baku)");
+  expect(outcome?.message).toContain("Confirmed with student");
 });
 test("conflicts and changed availability are revalidated at approval", async () => {
   const f = fixture(); const r = await f.s.request(student, "lesson", "slot");

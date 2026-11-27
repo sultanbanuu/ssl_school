@@ -44,6 +44,7 @@ type Lesson = Omit<Schedule, "endTime"> & {
   color?: string | null;
   status: string;
   rescheduledAt?: string | null;
+  rescheduleRequests?: { id: string; status: string }[];
   enrollment: Enrollment;
   teacher: { profile: Person };
   seriesId?: string | null;
@@ -141,18 +142,22 @@ function initialDraft(date: string, startTime = "10:00"): Draft {
 export function Lessons({
   role,
   onFailure,
+  onReviewRequest,
 }: {
   role: string;
   onFailure: (error: unknown) => void;
+  onReviewRequest?: (id: string) => void;
 }) {
-  return <LessonCalendar role={role} onFailure={onFailure} />;
+  return <LessonCalendar role={role} onFailure={onFailure} onReviewRequest={onReviewRequest} />;
 }
 function LessonCalendar({
   role,
   onFailure,
+  onReviewRequest,
 }: {
   role: string;
   onFailure: (error: unknown) => void;
+  onReviewRequest?: (id: string) => void;
 }) {
   const [contextLesson, setContextLesson] = useState<Lesson | null>(null);
   const [week, setWeek] = useState(() => monday(schoolToday()));
@@ -743,11 +748,13 @@ function LessonCalendar({
   const selected = draft?.id
     ? lessons.find((l) => l.id === draft.id)
     : undefined;
+  const pendingRequest = selected?.rescheduleRequests?.find(request => request.status === "pending");
   const readOnly = !editable || (!!draft && draft.status !== "scheduled");
   function card(l: Lesson, style: React.CSSProperties = {}, allDay = false) {
     const slot = visibleSlot(l);
     const person = editable ? name(l.enrollment.student.profile) : name(l.teacher.profile);
-    const label = `${person}, ${l.enrollment.course.name}, ${slot.date}, ${slot.allDay ? "all day" : slot.startTime + " to " + slot.endTime}, ${l.status}`;
+    const pending = l.rescheduleRequests?.[0]?.status === "pending";
+    const label = `${person}, ${l.enrollment.course.name}, ${slot.date}, ${slot.allDay ? "all day" : slot.startTime + " to " + slot.endTime}, ${l.status}${pending ? ", reschedule pending" : ""}`;
     return (
       <div
         key={l.id}
@@ -782,7 +789,8 @@ function LessonCalendar({
           {allDay ? "All day" : `${slot.startTime}–${slot.endTime}`}
         </small>
         {editable && <small>{name(l.teacher.profile)}</small>}
-        {l.status === "scheduled" && l.rescheduledAt && <small>Rescheduled</small>}
+        {pending && <small>Reschedule pending</small>}
+        {!pending && l.status === "scheduled" && l.rescheduledAt && <small>Rescheduled</small>}
         {!allDay && editable && l.status === "scheduled" && (
           <span
             className="cal-resize"
@@ -1157,6 +1165,10 @@ function LessonCalendar({
                 {name(selected.teacher.profile)} · {selected.status}
               </p>
             )}
+            {pendingRequest && onReviewRequest && <button type="button" className="cal-button" disabled={saving} onClick={() => {
+              setDraft(null);
+              onReviewRequest(pendingRequest.id);
+            }}>Review rescheduling request</button>}
             <fieldset disabled={saving || readOnly || directoryLoading}>
               {!draft.id && (
                 <div className="enrollment-fields">

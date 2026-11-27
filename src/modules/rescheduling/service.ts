@@ -24,9 +24,12 @@ function studentId(actor: Actor) {
   if (actor.role !== "student" || !actor.studentId) throw new HttpError(403, "Student access required");
   return actor.studentId;
 }
-function requestScope(actor: Actor) {
+function requestScope(actor: Actor): Prisma.RescheduleRequestWhereInput {
   if (actor.role === "student") return { studentId: studentId(actor) };
-  if (actor.role === "teacher" && actor.teacherId) return { teacherId: actor.teacherId };
+  if (actor.role === "teacher") {
+    if (!actor.teacherId) throw new HttpError(403, "Teacher account is incomplete");
+    return { lesson: { teacherId: actor.teacherId } };
+  }
   requireAdmin(actor);
   return {};
 }
@@ -104,27 +107,39 @@ export function createReschedulingService(db: PrismaClient) {
         return result;
       });
     },
-    async list(actor: Actor, offset: number) {
-      return db.rescheduleRequest.findMany({ where: requestScope(actor), include: { lesson: { include: { enrollment: { include: { course: { select: { name: true } }, student: { include: { profile: { select: { firstName: true, lastName: true } } } } } } } } }, orderBy: [{ createdAt: "desc" }, { id: "asc" }], take: 50, skip: offset });
+    async list(actor: Actor, offset: number, status?: "pending") {
+      return db.rescheduleRequest.findMany({ where: { ...requestScope(actor), ...(status && { status }) }, include: { lesson: { include: { enrollment: { include: { course: { select: { name: true } }, student: { include: { profile: { select: { firstName: true, lastName: true } } } } } } } } }, orderBy: [{ createdAt: "desc" }, { id: "asc" }], take: 50, skip: offset });
     },
-    async review(actor: Actor, id: string, status: "approved" | "rejected", note?: string) {
+    async review(actor: Actor, id: string, status: "approved" | "rejected", note?: string, startsAt?: string) {
       if (actor.role !== "admin" && actor.role !== "teacher") throw new HttpError(403, "Teacher or admin access required");
       return transaction(actor, async tx => {
-        const request = await tx.rescheduleRequest.findFirst({ where: { id, ...requestScope(actor) } });
+        const request = await tx.rescheduleRequest.findFirst({ where: { id, ...requestScope(actor) }, include: { lesson: { include } } });
         if (!request) throw new HttpError(404, "Request not found");
         if (request.status !== "pending") throw new HttpError(409, "This request has already been reviewed");
-        const lesson = await tx.lesson.findUniqueOrThrow({ where: { id: request.lessonId }, include });
-        if (actor.role === "teacher" && lesson.teacherId !== actor.teacherId) throw new HttpError(403, "This lesson is no longer assigned to you");
+        const { lesson } = request;
+        const requested = lessonSchedule(slotSchedule(request.startsAt, request.endsAt));
+        let updatedTime: { startsAt: Date; endsAt: Date; slotId: null } | undefined;
         if (status === "approved") {
           future(lesson);
           const [start, end] = absolute(lesson);
-          if (+start! !== +request.originalStart || +end! !== +request.originalEnd || lesson.teacherId !== request.teacherId) throw new HttpError(409, "The lesson changed after this request. Reject it and ask the student to submit again.");
-          const proposed = request.slotId ? await candidate(tx, lesson, request.slotId) : await calendarCandidate(tx, lesson, request.startsAt.toISOString());
-          if (+proposed.slot.startsAt !== +request.startsAt || +proposed.endsAt !== +request.endsAt) throw new HttpError(409, "Teacher availability changed. Reject this request and select a new time.");
+          if (+start! !== +request.originalStart || +end! !== +request.originalEnd) throw new HttpError(409, "The lesson changed after this request. Reject it and ask the student to submit again.");
+          const changedTime = startsAt !== undefined && Date.parse(startsAt) !== +request.startsAt;
+          const originalSlotId = !changedTime && lesson.teacherId === request.teacherId ? request.slotId : null;
+          const proposed = originalSlotId
+            ? await candidate(tx, lesson, originalSlotId)
+            : await calendarCandidate(tx, lesson, startsAt ?? request.startsAt.toISOString());
+          if (changedTime) {
+            updatedTime = { startsAt: proposed.slot.startsAt, endsAt: proposed.endsAt, slotId: null };
+          } else if (+proposed.slot.startsAt !== +request.startsAt || +proposed.endsAt !== +request.endsAt) {
+            throw new HttpError(409, "Teacher availability changed. Choose another time or reject the request.");
+          }
           await tx.lesson.update({ where: { id: lesson.id }, data: { ...dates(proposed.schedule), ...reminder(proposed.schedule, lesson.reminderMinutes), rescheduledAt: new Date(), seriesId: null, repeatRule: PrismaJsonNull(), cancelledByStudent: false } });
         }
-        const result = await tx.rescheduleRequest.update({ where: { id }, data: { status, reviewedBy: actor.id, reviewedAt: new Date(), reviewNote: note } });
-        await notify(tx, [lesson.enrollment.student.profileId, lesson.teacher.profileId], `Rescheduling ${status}`, `${studentName(lesson.enrollment.student.profile)} · ${lesson.enrollment.course.name}. ${status === "approved" ? `Previous: ${lessonSchedule(slotSchedule(request.originalStart, request.originalEnd))}. Confirmed: ${lessonSchedule(slotSchedule(request.startsAt, request.endsAt))}.` : `Request rejected. Unchanged lesson: ${lessonSchedule(serialize(lesson))}. Requested: ${lessonSchedule(slotSchedule(request.startsAt, request.endsAt))}.`}${note ? ` Review note: ${note}` : ""}`, lesson);
+        const result = await tx.rescheduleRequest.update({ where: { id }, data: { status, reviewedBy: actor.id, reviewedAt: new Date(), reviewNote: note, ...updatedTime } });
+        const outcome = status === "approved"
+          ? `Previous: ${lessonSchedule(slotSchedule(request.originalStart, request.originalEnd))}. ${updatedTime ? `Requested: ${requested}. ` : ""}Confirmed: ${lessonSchedule(slotSchedule(result.startsAt, result.endsAt))}.`
+          : `Request rejected. Unchanged lesson: ${lessonSchedule(serialize(lesson))}. Requested: ${requested}.`;
+        await notify(tx, [lesson.enrollment.student.profileId, lesson.teacher.profileId], `Rescheduling ${status}`, `${studentName(lesson.enrollment.student.profile)} · ${lesson.enrollment.course.name}. ${outcome}${note ? ` Review note: ${note}` : ""}`, lesson);
         return result;
       });
     },
