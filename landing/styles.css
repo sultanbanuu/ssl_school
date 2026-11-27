@@ -202,7 +202,12 @@ em { font-family: var(--accent); font-weight: 500; }
     pointer-events: auto;
   }
   .studio-nav-group { display: grid; grid-area: auto; justify-content: stretch; justify-items: start; gap: 0; }
-  .studio-nav-group a { padding-block: 8px; font-size: clamp(1.27rem, 4vw, 2.1rem); }
+  .studio-nav-links { gap: 14px; padding-top: calc(var(--compact-header-height) + 36px); }
+  .studio-nav-group a { padding-block: 12px; font-size: clamp(1.9rem, 7.5vw, 2.8rem); }
+  .studio-nav-group .nav-benefits::after { height: 10px; bottom: 14px; }
+  .studio-nav-group .nav-contact::after { inset: 6px -12px; }
+  .studio-nav-group .nav-roadmap { --brush-offset: 12px; }
+  .studio-nav-group .nav-roadmap::after { height: 9px; }
 }
 
 @media (max-width: 760px) {

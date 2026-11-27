@@ -1,10 +1,37 @@
-const reviewSamples = [
-  { name: 'Nümunə tələbə A', topic: 'Danışıq', text: 'Gündəlik mövzularda söhbət etdikcə fikrimi demək daha rahat oldu.', color: '#f0e2ff' },
-  { name: 'Nümunə tələbə B', topic: 'Söz ehtiyatı', text: 'Yeni sözləri öz cümlələrimdə işlətmək məşqi xoşuma gəldi.', color: '#ffebcf' },
-  { name: 'Nümunə tələbə C', topic: 'Cümlə quruluşu', text: 'Cümləni quranda harada çətinlik çəkdiyimi daha aydın gördüm.', color: '#e6e6ff' },
-  { name: 'Nümunə tələbə D', topic: 'Dinləmə', text: 'Qısa dinləmə məşqlərindən sonra eşitdiklərimə cavab verməyi sınadım.', color: '#e1f1eb' },
-  { name: 'Nümunə tələbə E', topic: 'Dərs cədvəli', text: 'Mənə uyğun saatı seçmək dərslərə vaxt ayırmağı asanlaşdırdı.', color: '#f8e1ec' },
+// Real student reviews (texts are excerpts of their own words).
+// Students without a photo get the default profile artwork.
+const reviews = [
+  { name: 'Gulshen Mukhtarli', photo: './assets/reviews/gulshen-mukhtarli.jpg', topic: 'Müəllimlər', text: 'I really like my teachers, and your teaching methods help me improve.', color: '#f0e2ff' },
+  { name: 'Nazila', photo: './assets/reviews/nazila.jpg', topic: 'Tövsiyə', text: 'I really like the teachers because they are friendly, supportive and patient. I would definitely recommend them to my friends!', color: '#ffebcf' },
+  { name: 'Riad Mammadov', photo: './assets/reviews/riad-mammadov.jpg', topic: 'Danışıq', text: 'The thing I love about our lessons is speaking. The site is cool too, and it makes everything a lot easier.', color: '#e6e6ff' },
+  { name: 'Turqay Alizade', photo: './assets/reviews/turqay-alizade.jpg', topic: 'İnkişaf', text: 'Dərslərə başlamazdan əvvəl A0 səviyyədə idim. İndi sadə cümlələr qura bilirəm və daha çox söz öyrənmişəm.', color: '#e1f1eb' },
+  { name: 'Nazrin Abdullayeva', photo: './assets/reviews/nazrin-abdullayeva.jpg', topic: 'Hisslər', text: 'I soon realized that it was about much more than just learning a language. I feel very lucky to have met you.', color: '#f8e1ec' },
+  { name: 'Aylin', photo: './assets/reviews/aylin.jpg', topic: 'Tövsiyə', text: 'I’ve become more confident in speaking English and expressing my thoughts. I would definitely recommend you to my friends!', color: '#f0e2ff' },
+  { name: 'Aynur Zulfugarli', photo: './assets/reviews/aynur-zulfugarli.jpg', topic: 'Müəllimlər', text: 'I really like the teachers and your new ideas. Yes, I would definitely recommend you to a friend.', color: '#ffebcf' },
+  { name: 'Ulviyya Amirova', photo: null, topic: 'Müəllimlər', text: 'You are the best teachers I have ever seen.', color: '#e6e6ff' },
+  { name: 'Maryam', photo: './assets/reviews/maryam.jpg', topic: 'Hisslər', text: 'I love my teachers. They make me happy, and I learn the lessons very well.', color: '#e1f1eb' },
+  { name: 'Alirza', photo: './assets/reviews/alirza.jpg', topic: 'İnkişaf', text: 'I have improved my skills in making up sentences and acquiring new vocabulary. Everything is perfect.', color: '#f8e1ec' },
+  { name: 'Amil Kazimov', photo: './assets/reviews/amil-kazimov.jpg', topic: 'Müəllimlər', text: 'My teachers are very kind, supportive, and professional. Thank you for motivating me and helping me learn English.', color: '#f0e2ff' },
+  { name: 'Nigar Aliyeva', photo: './assets/reviews/nigar-aliyeva.jpg', topic: 'Tövsiyə', text: 'You are the best teachers I have ever had, and of course I have recommended you to my friends.', color: '#ffebcf' },
+  { name: 'Aytekin Abdullayeva', photo: './assets/reviews/aytekin-abdullayeva.jpg', topic: 'Hisslər', text: 'Our lessons became more than just something I had to do. They turned into something I genuinely looked forward to.', color: '#e6e6ff' },
+  { name: 'Emine Agayeva', photo: null, topic: 'Tövsiyə', text: 'My biggest progress was not only in English but also in my personal development. I already recommended you to my own sister.', color: '#e1f1eb' },
+  { name: 'Kamala Abdulrazagova', photo: './assets/reviews/kamala-abdulrazagova.jpg', topic: 'Kömək', text: 'Thanks to you, I can speak English more fluently and confidently. I have happily recommended your lessons to my friends!', color: '#f8e1ec' },
+  { name: 'Leyla Ahmadova', photo: null, topic: 'Müəllimlər', text: 'I became comfortable sharing my thoughts without being afraid of making mistakes. The teachers were friendly, kind, and supportive.', color: '#f0e2ff' },
+  { name: 'Xedice Abulzade', photo: null, topic: 'Tövsiyə', text: 'I have recommended SSL to many friends and family members, and several of them have joined.', color: '#ffebcf' },
+  { name: 'Fidan Amiraslanova', photo: './assets/reviews/fidan-amiraslanova.jpg', topic: 'Hisslər', text: 'I felt happy and special during our lessons. You are both my teachers and my friends.', color: '#e6e6ff' },
+  { name: 'Mehri Jafarli', photo: null, topic: 'Hisslər', text: 'I’ve improved a lot and feel much more confident in English. I’d definitely recommend it to a friend!', color: '#e1f1eb' },
+  { name: 'Aysel Safarli', photo: null, topic: 'Kömək', text: 'Thank you for helping me believe in myself and showing me that speaking English isn’t as impossible as I once thought.', color: '#f8e1ec' },
+  { name: 'Nazrin Rahimli', photo: './assets/reviews/nazrin-rahimli.jpg', topic: 'Hisslər', text: 'I enjoyed every class so much that sometimes I didn’t even notice how quickly the time passed.', color: '#f0e2ff' },
+  { name: 'Valentina Asgarova', photo: './assets/reviews/valentina-asgarova.jpg', topic: 'Hisslər', text: 'Your positivity and strategy boosted my confidence. Every single lesson felt like therapy.', color: '#ffebcf' },
+  { name: 'Narmina Agayeva', photo: './assets/reviews/narmina-agayeva.jpg', topic: 'Müəllimlər', text: 'The lessons never felt like ordinary classes; they were more like deep conversations. I would definitely recommend you to a friend.', color: '#e6e6ff' },
+  { name: 'Fidan Gadirova', photo: './assets/reviews/fidan-gadirova.jpg', topic: 'Tövsiyə', text: 'My studying time with you was one of the best experiences of my life. I still recommend you to everyone around me.', color: '#e1f1eb' },
+  { name: 'Ulviyya Mehraliyeva', photo: './assets/reviews/ulviyya-mehraliyeva.jpg', topic: 'Kömək', text: 'I made significant progress. Thank you for your time, support, and dedication.', color: '#f8e1ec' },
+  { name: 'Peyker Aliyeva', photo: './assets/reviews/peyker-aliyeva.jpg', topic: 'Tövsiyə', text: 'Choosing SSL School was one of the best decisions I’ve made. Many of my friends became SSL students after me.', color: '#f0e2ff' },
+  { name: 'Amin Bagirov', photo: './assets/reviews/amin-bagirov.jpg', topic: 'Kömək', text: 'You taught me how to be very relaxed when speaking. Now I can even communicate comfortably with foreigners.', color: '#ffebcf' },
+  { name: 'Aylin Azizova', photo: './assets/reviews/aylin-azizova.jpg', topic: 'Kömək', text: 'Within just four months, I became much more comfortable talking to my professors in English and regained my confidence.', color: '#e6e6ff' },
+  { name: 'Aydan Mammadova', photo: './assets/reviews/aydan-mammadova.jpg', topic: 'Hisslər', text: 'One of the things I appreciated most was being listened to without being judged.', color: '#e1f1eb' },
 ];
+const defaultReviewPhoto = './assets/reviews/default-profile.svg';
 
 function reviewGallery() {
   return `<section id="reyler" class="home-section home-feedback" aria-labelledby="feedback-title" data-home-sky="reviews">
@@ -13,14 +40,14 @@ function reviewGallery() {
       <a class="text-link" href="https://www.instagram.com/sslschool.az/" target="_blank" rel="noopener">Rəyləri Instagram-da oxu</a>
     </div>
     <div id="review-collection" class="review-collection">
-      <div class="review-stage" tabindex="0" role="group" aria-label="Nümunə rəy kartları">
+      <div class="review-stage" tabindex="0" role="group" aria-label="Tələbə rəyləri">
         <ol class="review-list" role="list">
-          ${reviewSamples.map((review, index) => `<li class="review-slide" style="--review-paper:${review.color}">
+          ${reviews.map(review => `<li class="review-slide" style="--review-paper:${review.color}">
             <figure class="review-card">
-              <span class="review-topic">Nümunə · ${review.topic}</span>
+              <span class="review-topic">${review.topic}</span>
               <blockquote class="review-text">${review.text}</blockquote>
               <figcaption class="review-identity">
-                <span class="review-portrait" aria-hidden="true" style="--portrait-column:${index % 3};--portrait-row:${Math.floor(index / 3)}"></span>
+                <img class="review-portrait${review.photo ? '' : ' is-default'}" src="${review.photo || defaultReviewPhoto}" alt="" width="45" height="45" loading="lazy" decoding="async" draggable="false">
                 <span>${review.name}</span>
               </figcaption>
             </figure>
@@ -29,7 +56,7 @@ function reviewGallery() {
       </div>
       <div class="review-navigation">
         <button type="button" data-review-step="-1" aria-label="Əvvəlki rəy">←</button>
-        <span class="review-count">1 / ${reviewSamples.length}</span>
+        <span class="review-count">1 / ${reviews.length}</span>
         <button type="button" data-review-step="1" aria-label="Növbəti rəy">→</button>
       </div>
     </div>
