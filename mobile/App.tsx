@@ -40,7 +40,7 @@ export default function App() {
   const [notice, setNotice] = useState(() => Platform.OS === "web" && new URLSearchParams(globalThis.location.search).has("error")
     ? "This verification link is invalid or has expired. Sign in to request a new link."
     : "");
-  const verificationCallback = Platform.OS === "web" ? `${globalThis.location.origin}/` : "sslschool://";
+  const verificationCallback = Platform.OS === "web" ? `${globalThis.location.origin}/app/` : "sslschool://";
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [surname, setSurname] = useState("");

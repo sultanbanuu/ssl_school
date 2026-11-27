@@ -18,11 +18,12 @@ self.addEventListener("notificationclick", event => {
   event.waitUntil((async () => {
     const userId = event.notification.data?.userId;
     for (const client of await self.clients.matchAll({ type: "window", includeUncontrolled: true })) {
-      if (new URL(client.url).origin !== self.location.origin) continue;
+      const clientUrl = new URL(client.url);
+      if (clientUrl.origin !== self.location.origin || !clientUrl.pathname.startsWith("/app")) continue;
       await client.focus();
       client.postMessage({ type: "school-push-open", userId });
       return;
     }
-    await self.clients.openWindow(`/?pushUser=${encodeURIComponent(userId)}`);
+    await self.clients.openWindow(`/app/?pushUser=${encodeURIComponent(userId)}`);
   })());
 });

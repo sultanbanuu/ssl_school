@@ -1,5 +1,21 @@
 # Railway API deployment — Developer 1
 
+## Website layout (sslschool.az)
+
+`sslschool.az/` is the marketing landing page (source in `landing/`), and the web
+app with login and signup lives at `sslschool.az/app/`. The landing page's
+**Login** button links to `/app/`. Build both together and upload the whole
+output folder to Workers Static Assets:
+
+```sh
+bun run web:build        # writes dist-web/ and runs the lesson-counter check
+bun scripts/serve-web.ts # optional local preview on http://localhost:8090
+```
+
+Email verification and password-reset links now return to `/app/`. Older links
+that point at the site root are forwarded to `/app/` by the landing page. The web
+origin is unchanged, so `TRUSTED_ORIGINS` does not need updating.
+
 ## Web release counter check
 
 Before publishing any Expo web export, run `bun run web:verify-counter <export-directory>`

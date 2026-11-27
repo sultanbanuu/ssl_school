@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="az">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f8f6f0">
+  <meta name="description" content="SSL School ilə akademik, ümumi və texniki ingilis dili. Fərdi onlayn dərsləri kəşf et və qısa interaktiv məşqi sına.">
+  <link rel="icon" href="./assets/favicon.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@1,500;1,600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./home.css">
+  <link rel="stylesheet" href="./home-reviews.css">
+  <link rel="stylesheet" href="./journey.css">
+  <link rel="stylesheet" href="./journey-week.css">
+  <link rel="stylesheet" href="./home-night.css">
+  <link rel="stylesheet" href="./course-road.css">
+  <script src="./content.js" defer></script>
+  <script src="./course-walker.js" defer></script>
+  <script src="./course-sky.js" defer></script>
+  <script src="./course-road.js" defer></script>
+  <script src="./journey-route.js" defer></script>
+  <script src="./journey-week.js" defer></script>
+  <script src="./journey-tunnel.js" defer></script>
+  <script src="./journey.js" defer></script>
+  <script src="./home-reviews.js" defer></script>
+  <script src="./home-faq-fold.js" defer></script>
+  <script src="./home-paper.js" defer></script>
+  <script src="./home.js" defer></script>
+  <script src="./studio.js" defer></script>
+  <title>SSL School · Fərdi onlayn ingilis dili</title>
+</head>
+<body>
+  <a class="skip" href="#main">Məzmuna keç</a>
+  <header class="site-header">
+    <nav class="studio-navigation wrap" aria-label="Əsas menyu">
+      <a class="brand studio-nav-brand" href="./" aria-label="SSL School · Ana səhifə">
+        <img class="wordmark" src="./assets/wordmark.png" alt="" width="576" height="120">
+      </a>
+      <button class="studio-menu-toggle" type="button" aria-controls="studio-nav-links" aria-expanded="false" aria-label="Menyunu aç">
+        <span class="studio-menu-icon" aria-hidden="true">
+          <img src="./assets/roadmap-icons/menu-top.svg" alt="" width="30" height="7">
+          <img src="./assets/roadmap-icons/menu-middle.svg" alt="" width="30" height="7">
+          <img src="./assets/roadmap-icons/menu-bottom.svg" alt="" width="30" height="7">
+        </span>
+      </button>
+      <div class="studio-nav-links" id="studio-nav-links">
+        <div class="studio-nav-group studio-nav-left">
+          <a href="./#reyler" class="nav-reviews" lang="en">Reviews</a>
+          <a href="./#dersin-gedisi" class="nav-roadmap yellow-underline">Yol xəritəsi</a>
+          <a href="./#ustunlukler" class="nav-benefits" lang="en">Benefits</a>
+          <a href="./#suallar" class="nav-faq" lang="en">FAQ</a>
+        </div>
+        <div class="studio-nav-group studio-nav-right">
+          <a href="./?page=kurslar" data-nav="kurslar" class="nav-courses" lang="en">Courses</a>
+          <a href="./#elaqe" class="nav-contact" lang="en">Consultation</a>
+        </div>
+      </div>
+    </nav>
+  </header>
+  <main id="main" class="wrap" tabindex="-1">
+    <noscript>İnteraktiv dərsi və kursları görmək üçün JavaScript-i aktiv et.</noscript>
+  </main>
+  <footer class="site-footer wrap">
+    <div class="footer-brand">
+      <a class="brand" href="./" aria-label="SSL School · Ana səhifə">
+        <img class="brand-mark" src="./assets/logo.png" alt="" width="63" height="36">
+        <img class="wordmark" src="./assets/wordmark.png" alt="SSL School" width="103" height="25">
+      </a>
+      <p>Fərdi onlayn ingilis dili dərsləri</p>
+    </div>
+  </footer>
+</body>
+</html>

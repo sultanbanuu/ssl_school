@@ -1,9 +1,11 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 // Run against the exact export being uploaded, including release-copy exports.
 const root = resolve(process.argv[2] || "tmp/lesson-counter-web");
-const html = readFileSync(resolve(root, "index.html"), "utf8");
+// The site build moves the app page to /app/; plain Expo exports keep it at the root.
+const appHtml = existsSync(resolve(root, "app/index.html")) ? "app/index.html" : "index.html";
+const html = readFileSync(resolve(root, appHtml), "utf8");
 const bundlePath = html.match(/src="\/(\_expo\/static\/js\/web\/index-[^"]+\.js)"/)?.[1];
 if (!bundlePath) throw new Error("Cannot find the exported application bundle");
 // Expo can split StudentApp into a lazily loaded chunk. Validate every exported

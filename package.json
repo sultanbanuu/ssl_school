@@ -24,6 +24,7 @@
     "test:notifications:ui": "bun scripts/test-notification-ui.ts",
     "test:audit:ui": "bun scripts/test-audit-ui.ts",
     "test:calendar:ui": "bun scripts/test-calendar-ui.ts",
+    "web:build": "bun scripts/build-web.ts",
     "mobile:export": "expo export --platform web --output-dir mobile/dist-notification-review",
     "test:availability:ui": "bun scripts/test-availability-ui.ts",
     "test:performance:ui": "bun scripts/test-performance-ui.ts"

@@ -1,0 +1,36 @@
+.review-collection { margin-top: clamp(23px, 4vw, 45px); text-align: center; }
+.review-stage {
+  --review-width: clamp(184px, 26vw, 290px);
+  --review-radius: calc(var(--review-width) * 1.6);
+  position: relative;
+  width: min(100%, 1160px);
+  height: clamp(252px, 31vw, 345px);
+  margin: 4px auto;
+  overflow: hidden;
+  touch-action: pan-y pinch-zoom;
+  user-select: none;
+  cursor: grab;
+}
+.review-stage:focus-visible { outline-offset: -3px; outline-style: dashed; }
+.review-stage.is-dragging { cursor: grabbing; }
+.review-list { position: absolute; inset: 0; display: grid; place-items: center; padding: 0; margin: 0; list-style: none; perspective: 900px; }
+.review-slide {
+  grid-area: 1 / 1;
+  width: var(--review-width);
+  transform: translate3d(calc(var(--review-x) * var(--review-radius) + var(--review-drag, 0px)), 0, calc(var(--review-z) * var(--review-radius))) rotateY(var(--review-yaw));
+  opacity: clamp(0, calc(2.05 - var(--review-distance) * .86), 1);
+  transition: transform 500ms cubic-bezier(.2,.74,.25,1), opacity 280ms ease;
+}
+.review-stage:is(.is-dragging, .is-spinning) .review-slide { transition: none; }
+.review-card { display: grid; align-content: center; justify-items: center; gap: 9px; width: 100%; min-height: clamp(216px, 25vw, 286px); margin: 0; padding: clamp(13px, 2.4vw, 28px); border-radius: 18px; background: radial-gradient(ellipse at 12% 2%,#fffdfd,transparent 72%), var(--review-paper); color: #332247; box-shadow: 0 14px 31px #0502069e; text-align: center; }
+.review-topic { color: #664a80; font-size: .81rem; font-weight: 800; }
+.review-text { margin: 0; color: #342447; font: italic 600 clamp(1.05rem, 1.77vw, 1.5rem)/1.26 var(--accent); text-wrap: balance; }
+.review-identity { display: inline-flex; gap: 8px; align-items: center; margin-top: 6px; color: #493264; font-size: .8rem; font-weight: 800; text-align: left; }
+.review-portrait { flex: 0 0 auto; width: clamp(34px, 4vw, 45px); aspect-ratio: 1; border-radius: 50%; background: #e6d3ec url('./assets/review-portraits.webp') no-repeat calc(var(--portrait-column) * 50%) calc(var(--portrait-row) * 100%) / 300% 200%; }
+.review-navigation { display: flex; justify-content: center; align-items: center; gap: 11px; color: var(--muted); font-size: .88rem; font-weight: 800; }
+.review-navigation button { width: 44px; min-height: 40px; padding: 0; border: 0; background: none; color: #e8cbff; font: 700 1.35rem var(--body); }
+.review-navigation button:hover { color: #ffe4c5; }
+
+@media (max-width: 560px) {
+  .review-stage { --review-radius: calc(var(--review-width) * 1.55); }
+}

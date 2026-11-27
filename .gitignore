@@ -6,6 +6,7 @@ node_modules/
 src/generated/
 coverage/
 dist/
+dist-web/
 *.log
 .expo/
 .expo
