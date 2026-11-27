@@ -7,9 +7,9 @@ const questionCards = [
   { text: 'Dərsə vaxt ayıra bilməmək, gedişatı izləyə bilməmək və daha bir çoxu…', paper: '#cbdfff' },
   { text: 'Dil öyrənmək bu qədər problemidir bəyəm…?', paper: '#f8d486' },
   {
-    text: 'Amma bunu unutma ki, hər problemin bir həll yolu var',
+    text: 'Amma unutma ki, hər problemin bir həll yolu var',
     mission: 'İşimiz elə budur:',
-    support: 'Sənin dil öyrənmə yolunda sənə dəstək olmaq, özünü ifadə ilə bağlı ən comfortlu space yaratmaq',
+    support: 'Sənin dil öyrənmə yolunda sənə dəstək olmaq, özünü ifadə ilə bağlı ən komfortlu mühit yaratmaq',
     paper: '#d5c3fa',
   },
 ];
