@@ -1,4 +1,5 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 
 // Builds the full sslschool.az site:
@@ -13,8 +14,14 @@ rmSync(out, { recursive: true, force: true });
 const exported = Bun.spawnSync(["bunx", "expo", "export", "--platform", "web", "--output-dir", out, "--clear"], {
   stdout: "inherit",
   stderr: "inherit",
-  // Bun preloads local .env files; drop those values so Expo reads .env.production.local itself.
-  env: { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("EXPO_PUBLIC_"))), NODE_ENV: "production" },
+  // Locally, Bun preloads .env files; drop those values so Expo reads .env.production.local itself.
+  // On Cloudflare Pages there is no such file, so keep the EXPO_PUBLIC_* values set in the dashboard.
+  env: {
+    ...(existsSync(".env.production.local")
+      ? Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("EXPO_PUBLIC_")))
+      : process.env),
+    NODE_ENV: "production",
+  },
 });
 if (exported.exitCode !== 0) throw new Error("Expo web export failed");
 
@@ -30,6 +37,16 @@ for (const entry of readdirSync(landing, { recursive: true, withFileTypes: true 
   mkdirSync(dirname(target), { recursive: true });
   copyFileSync(source, target);
 }
+
+// Cloudflare lets browsers keep .js/.css for hours, so give every landing script and stylesheet
+// a content-hash query: a changed file gets a new URL and visitors fetch it right after a deploy.
+const landingPage = resolve(out, "index.html");
+writeFileSync(landingPage, readFileSync(landingPage, "utf8").replace(/(src|href)="\.\/([\w-]+\.(?:js|css))"/g, (match, attribute, name) => {
+  const file = resolve(out, name);
+  if (!existsSync(file)) throw new Error(`Landing page references missing file ${name}`);
+  const version = createHash("sha256").update(readFileSync(file)).digest("hex").slice(0, 10);
+  return `${attribute}="./${name}?v=${version}"`;
+}));
 
 const bundles = readdirSync(resolve(out, "_expo/static/js/web")).map(name => readFileSync(resolve(out, "_expo/static/js/web", name), "utf8")).join(" ");
 const apiURL = process.env.SITE_API_URL || "https://api.sslschool.az";

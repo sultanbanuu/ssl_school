@@ -1,6 +1,7 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "site", "runtimeExecutable": "bun", "runtimeArgs": ["scripts/serve-web.ts"], "port": 8090 }
+    { "name": "site", "runtimeExecutable": "bun", "runtimeArgs": ["scripts/serve-web.ts"], "port": 8090 },
+    { "name": "landing", "runtimeExecutable": "bun", "runtimeArgs": ["scripts/serve-web.ts", "landing"], "port": 8092 }
   ]
 }
