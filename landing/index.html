@@ -76,8 +76,11 @@
     (function () {
       var loader = document.getElementById('page-loader');
       var done = false;
+      var MIN_MS = 2500; // keep the mascot on screen for about 2.5 seconds, even on fast loads
       function hide() {
         if (done) return;
+        var wait = MIN_MS - performance.now();
+        if (wait > 0) { setTimeout(hide, wait); return; }
         done = true;
         loader.classList.add('is-done');
         loader.removeAttribute('aria-busy');

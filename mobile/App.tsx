@@ -31,6 +31,7 @@ const authHorizontalPadding = 22;
 const authColumnGap = 40;
 const authMaxWidth = 1060;
 const scoreCardsAspectRatio = 16 / 9;
+const OPENING_MIN_MS = 2500;
 export default function App() {
   const [mode, setMode] = useState<"signup" | "signin" | "verify" | "forgot" | "reset">("signin");
   const [resetToken, setResetToken] = useState("");
@@ -54,6 +55,13 @@ export default function App() {
   const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
   const [checking, setChecking] = useState(true);
+  // Keep the opening mascot loader up for about 2.5 seconds, even when the session check is quick.
+  const [introDone, setIntroDone] = useState(false);
+  useEffect(() => {
+    const elapsed = typeof performance !== "undefined" ? performance.now() : 0;
+    const timer = setTimeout(() => setIntroDone(true), Math.max(0, OPENING_MIN_MS - elapsed));
+    return () => clearTimeout(timer);
+  }, []);
   const [error, setError] = useState("");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [signedIn, setSignedIn] = useState(false);
@@ -279,7 +287,7 @@ export default function App() {
 
   // While a sign-in request is in flight, show the full mascot loader instead of a small button spinner.
   const signingIn = busy && mode === "signin" && !signedIn;
-  if (checking || signingIn || (signedIn && busy && !profile && !error)) return <OpeningSchool />;
+  if (checking || !introDone || signingIn || (signedIn && busy && !profile && !error)) return <OpeningSchool />;
 
   if (signedIn && profile && !recovery) {
     const SchoolApp = profile.role === "student" ? StudentApp : StaffSchoolApp;
