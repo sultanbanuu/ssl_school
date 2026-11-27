@@ -277,7 +277,9 @@ export default function App() {
     setConfirm("");
   }
 
-  if (checking || (signedIn && busy && !profile && !error)) return <OpeningSchool />;
+  // While a sign-in request is in flight, show the full mascot loader instead of a small button spinner.
+  const signingIn = busy && mode === "signin" && !signedIn;
+  if (checking || signingIn || (signedIn && busy && !profile && !error)) return <OpeningSchool />;
 
   if (signedIn && profile && !recovery) {
     const SchoolApp = profile.role === "student" ? StudentApp : StaffSchoolApp;
