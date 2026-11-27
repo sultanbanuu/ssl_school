@@ -8,9 +8,12 @@
     /* Page loader: visible from the first paint, faded out once the page has loaded. */
     .page-loader { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: #08060d; font-family: Manrope, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; transition: opacity .4s ease, visibility .4s; }
     .page-loader.is-done { opacity: 0; visibility: hidden; }
-    /* Smooth cross-fade between pages (courses, home, the app) instead of a hard jump. */
-    @view-transition { navigation: auto; }
-    ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .3s; }
+    /* Page-to-page fade. No cross-document view transition: it makes the browser hold the old page
+       for a snapshot (~0.5s on this heavy page), so clicks felt slow. Instead the old content fades out
+       while the next page loads, and the new content fades in once the scripts have rendered it. */
+    main, .site-footer { transition: opacity .25s ease; }
+    html.page-entering main, html.page-entering .site-footer { opacity: 0; transition: none; }
+    html.page-leaving main, html.page-leaving .site-footer { opacity: 0; transition-duration: .15s; }
     .page-loader-stage { position: relative; width: 154px; height: 150px; display: flex; align-items: flex-end; justify-content: center; }
     .page-loader-mascot { width: 96px; height: 132px; margin-bottom: 4px; background: url(./assets/mascot-loader.png) center / contain no-repeat; transform-origin: 50% 100%; animation: page-loader-float 1.5s ease-in-out infinite; }
     .page-loader-shadow { position: absolute; bottom: 0; width: 86px; height: 12px; border-radius: 50%; background: #000; box-shadow: 0 0 10px #000; animation: page-loader-shadow 1.5s ease-in-out infinite; }
@@ -66,6 +69,10 @@
     (function () {
       var q = new URLSearchParams(location.search);
       if (q.has('flow') || q.has('token') || q.has('pushUser') || (q.has('error') && !q.has('page'))) location.replace('/app/' + location.search + location.hash);
+      // Keep the content hidden until studio.js has rendered it; never longer than 2.5s if a script fails.
+      var root = document.documentElement;
+      root.classList.add('page-entering');
+      setTimeout(function () { root.classList.remove('page-entering'); }, 2500);
     })();
   </script>
   <title>SSL School · Fərdi onlayn ingilis dili</title>

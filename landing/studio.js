@@ -170,6 +170,28 @@ if (page === 'ders') {
   setupContact(location.hash === '#elaqe' ? selectedCourse?.title : undefined);
 }
 setupStudioMenu();
+setupPageFade();
+
+// The page content is rendered: fade it in (index.html hides it until now).
+function setupPageFade() {
+  const root = document.documentElement;
+  requestAnimationFrame(() => root.classList.remove('page-entering'));
+
+  // A link to another page: fade the content out while the browser loads the next page.
+  // The navigation itself is never delayed.
+  document.addEventListener('click', event => {
+    const link = event.target.closest('a[href]');
+    if (!link || event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    if (link.target && link.target !== '_self' || link.hasAttribute('download')) return;
+    const url = new URL(link.href, location.href);
+    if (url.origin !== location.origin || (url.pathname === location.pathname && url.search === location.search)) return;
+    root.classList.add('page-leaving');
+  });
+  // Coming back with the browser's back button can restore this page as it was left.
+  window.addEventListener('pageshow', event => {
+    if (event.persisted) root.classList.remove('page-leaving');
+  });
+}
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 let motionPaused;
