@@ -1,4 +1,4 @@
-import MascotLoader, { isFirstEntry, ScreenFade, SLOW_MS, useSlow } from "./MascotLoader";
+import MascotLoader, { isFirstEntry, ScreenFade } from "./MascotLoader";
 import { phoneSchema } from "../src/shared/phone";
 import React, { lazy, Suspense, useEffect, useState } from "react";
 import * as Linking from "expo-linking";
@@ -57,15 +57,19 @@ export default function App() {
   const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
   const [checking, setChecking] = useState(true);
-  // On the first visit, keep the opening mascot loader up for about 2.5 seconds even when the session check is quick.
-  // Later visits in the same tab skip it unless loading is slow.
+  // The mascot loader only shows when someone first enters (first page in this tab, or app launch):
+  // at least ~2.5 seconds, and until the first session check finishes. It never comes back after that.
   const [introDone, setIntroDone] = useState(!FIRST_ENTRY);
+  const [entering, setEntering] = useState(FIRST_ENTRY);
   useEffect(() => {
     if (!FIRST_ENTRY) return;
     const elapsed = typeof performance !== "undefined" ? performance.now() : 0;
     const timer = setTimeout(() => setIntroDone(true), Math.max(0, OPENING_MIN_MS - elapsed));
     return () => clearTimeout(timer);
   }, []);
+  useEffect(() => {
+    if (entering && introDone && !checking) setEntering(false);
+  }, [entering, introDone, checking]);
   const [error, setError] = useState("");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [signedIn, setSignedIn] = useState(false);
@@ -289,18 +293,14 @@ export default function App() {
     setConfirm("");
   }
 
-  // Signing in or opening the profile only switches to the full mascot loader when the network is slow.
-  const authWaiting = (busy && mode === "signin" && !signedIn) || (signedIn && busy && !profile && !error);
-  const slowAuth = useSlow(authWaiting);
-  const slowCheck = useSlow(checking);
-  if (!introDone) return <OpeningSchool delay={0} />;
-  if (checking) return slowCheck ? <OpeningSchool delay={0} /> : <View style={s.page} />;
-  if (slowAuth) return <OpeningSchool delay={0} />;
+  // The mascot loader only appears when someone first enters. Afterwards screens simply fade in.
+  if (entering) return <OpeningSchool />;
+  if (checking) return <View style={s.page} />;
 
   if (signedIn && profile && !recovery) {
     const SchoolApp = profile.role === "student" ? StudentApp : StaffSchoolApp;
     return (
-      <Suspense fallback={<OpeningSchool delay={SLOW_MS} />}>
+      <Suspense fallback={<View style={s.page} />}>
         <ScreenFade style={{ flex: 1 }}>
           <SchoolApp
             key={profile.id}
@@ -596,11 +596,11 @@ export default function App() {
     </ScreenFade>
   );
 }
-function OpeningSchool({ delay }: { delay: number }) {
+function OpeningSchool() {
   return (
     <View style={[s.page, s.loading]}>
       <StatusBar barStyle="light-content" />
-      <MascotLoader size="large" label="Loading" accessibilityLabel="Opening SSL School" delay={delay} />
+      <MascotLoader size="large" label="Loading" accessibilityLabel="Opening SSL School" />
     </View>
   );
 }

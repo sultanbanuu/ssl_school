@@ -56,9 +56,6 @@
       @keyframes boot-shadow { 0%, 100% { opacity: .4; transform: scaleX(1); } 50% { opacity: .24; transform: scaleX(.8); } }
       @keyframes boot-dot { 0%, 33%, 100% { transform: translateY(0); } 16% { transform: translateY(-7px); } }
       @media (prefers-reduced-motion: reduce) { .boot-mascot, .boot-shadow, .boot-label i { animation: none; } }
-      /* Repeat visits in the same tab: the splash stays hidden unless loading is slow. */
-      .boot { transition: opacity .25s ease; }
-      .boot.boot-quiet { opacity: 0; }
       /* Smooth cross-fade when moving between the landing page and the app. */
       @view-transition { navigation: auto; }
       ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .3s; }
@@ -76,10 +73,8 @@
         (function () {
           var seen = false;
           try { seen = !!sessionStorage.getItem('ssl-loader-seen'); } catch (e) {}
-          if (!seen) return;
-          var boot = document.querySelector('.boot');
-          boot.classList.add('boot-quiet');
-          setTimeout(function () { boot.classList.remove('boot-quiet'); }, 600);
+          // Already entered the site in this tab: no loader, the app just fades in.
+          if (seen) document.querySelector('.boot').remove();
         })();
       </script>
     </div>

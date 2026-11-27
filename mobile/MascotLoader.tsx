@@ -6,18 +6,14 @@ const native = Platform.OS !== "web";
 const HOP_MS = 1500;
 const DOT_MS = 420;
 
-/** Loads faster than this get no loader at all, just a smooth fade-in of the content. */
-export const SLOW_MS = 600;
 const SEEN_KEY = "ssl-loader-seen";
 
 type Props = {
   /** Word shown under the mascot. Dots are animated after it. */
   label?: string;
-  /** "large" for full-screen loading, "small" for inline section loading. */
+  /** "large" is the full-screen entry loader. "small" marks in-page loading, which shows nothing. */
   size?: "large" | "small";
   accessibilityLabel?: string;
-  /** How long loading must last before the mascot appears. 0 shows it straight away. */
-  delay?: number;
 };
 
 let seenThisLaunch = false;
@@ -31,18 +27,6 @@ export function isFirstEntry() {
     globalThis.sessionStorage?.setItem(SEEN_KEY, "1");
   } catch {}
   return true;
-}
-
-/** Becomes true once `active` has stayed true for `delay` ms — i.e. the network is being slow. */
-export function useSlow(active: boolean, delay = SLOW_MS) {
-  const [slow, setSlow] = useState(active && delay <= 0);
-  useEffect(() => {
-    if (!active) { setSlow(false); return; }
-    if (delay <= 0) { setSlow(true); return; }
-    const timer = setTimeout(() => setSlow(true), delay);
-    return () => clearTimeout(timer);
-  }, [active, delay]);
-  return slow;
 }
 
 /** Fades and slides its content in when it mounts. Give it a `key` per screen to animate screen changes. */
@@ -70,14 +54,16 @@ function useReduceMotion() {
   return reduce;
 }
 
-/** Shows the mascot only when loading turns out to be slow; quick loads show nothing. */
-export default function MascotLoader({ delay = SLOW_MS, ...props }: Props) {
-  const slow = useSlow(true, delay);
-  if (!slow) return null;
-  return <ScreenFade duration={delay > 0 ? 220 : 0}><LoaderBody {...props} /></ScreenFade>;
+/**
+ * The mascot is only for entering the site (size "large"). In-page loading between screens shows
+ * nothing; the content fades in with ScreenFade once it arrives.
+ */
+export default function MascotLoader(props: Props) {
+  if (props.size !== "large") return null;
+  return <LoaderBody {...props} />;
 }
 
-function LoaderBody({ label = "Loading", size = "small", accessibilityLabel }: Omit<Props, "delay">) {
+function LoaderBody({ label = "Loading", size = "small", accessibilityLabel }: Props) {
   const reduce = useReduceMotion();
   const hop = useRef(new Animated.Value(0)).current;
   const dots = useRef([0, 1, 2].map(() => new Animated.Value(0))).current;

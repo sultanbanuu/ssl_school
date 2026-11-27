@@ -7,7 +7,7 @@
   <style>
     /* Page loader: visible from the first paint, faded out once the page has loaded. */
     .page-loader { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: #08060d; font-family: Manrope, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; transition: opacity .4s ease, visibility .4s; }
-    .page-loader.is-done, .page-loader.is-quiet { opacity: 0; visibility: hidden; }
+    .page-loader.is-done { opacity: 0; visibility: hidden; }
     /* Smooth cross-fade between pages (courses, home, the app) instead of a hard jump. */
     @view-transition { navigation: auto; }
     ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .3s; }
@@ -79,26 +79,17 @@
     (function () {
       var loader = document.getElementById('page-loader');
       var done = false;
-      // First visit in this tab: keep the mascot up for about 2.5 seconds.
-      // Later pages: stay hidden, and only appear if the page is still loading after 600 ms (slow network).
+      // Only when the visitor first enters the site (first page in this tab): show the mascot for about 2.5 seconds.
+      // Every later page skips the loader entirely and just cross-fades in.
       var seen = false;
       try { seen = !!sessionStorage.getItem('ssl-loader-seen'); sessionStorage.setItem('ssl-loader-seen', '1'); } catch (e) {}
-      var minUntil = seen ? 0 : 2500;
-      var slowTimer;
-      if (seen) {
-        loader.classList.add('is-quiet');
-        slowTimer = setTimeout(function () {
-          loader.classList.remove('is-quiet');
-          minUntil = performance.now() + 700; // once shown, don't flash it away instantly
-        }, 600);
-      }
+      if (seen) { loader.remove(); return; }
+      var MIN_MS = 2500;
       function hide() {
         if (done) return;
-        var wait = minUntil - performance.now();
+        var wait = MIN_MS - performance.now();
         if (wait > 0) { setTimeout(hide, wait); return; }
         done = true;
-        clearTimeout(slowTimer);
-        if (loader.classList.contains('is-quiet')) { loader.remove(); return; }
         loader.classList.add('is-done');
         loader.removeAttribute('aria-busy');
         setTimeout(function () { loader.remove(); }, 450);
