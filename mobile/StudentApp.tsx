@@ -1,3 +1,4 @@
+import MascotLoader from "./MascotLoader";
 import { SwipeBack } from "./SwipeBack";
 import { BackIcon } from "./CourseIcon";
 import { SchoolIcon } from "./SchoolIcon";
@@ -9,7 +10,6 @@ import { phoneSchema } from "../src/shared/phone";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import {
-  ActivityIndicator,
   AppState,
   BackHandler,
   Image,
@@ -509,9 +509,8 @@ function StudentShell({
               <Text style={{ color: "#a49dff" }}>.</Text>
             </Text>
             {openingToday && (
-              <View style={s.loadingToday} accessibilityRole="progressbar" accessibilityLabel="Loading courses and lessons" accessibilityState={{ busy: true }}>
-                <ActivityIndicator color="#a49dff" />
-                <Text style={s.muted}>Loading courses and lessons…</Text>
+              <View style={s.loadingToday}>
+                <MascotLoader accessibilityLabel="Loading courses and lessons" />
               </View>
             )}
 

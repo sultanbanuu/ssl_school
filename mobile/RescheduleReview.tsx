@@ -1,5 +1,6 @@
+import MascotLoader from "./MascotLoader";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, AppState, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { AppState, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { schoolRequest, SessionExpiredError } from "./auth-client";
 import { bookingTime } from "./LessonRescheduleControls";
 
@@ -140,7 +141,7 @@ export function RescheduleReview({ admin, open, focusedRequest, onToggle, onChan
       <Text style={s.title}>Rescheduling requests{pendingCount ? ` (${pendingCount} pending)` : ""} {open ? "−" : "+"}</Text>
     </Pressable>
     {open && <View style={s.wrap}>
-      {loading && <ActivityIndicator accessibilityLabel="Loading rescheduling requests" />}
+      {loading && <MascotLoader accessibilityLabel="Loading rescheduling requests" />}
       {!!loadError && <Text accessibilityRole="alert" style={s.error}>{loadError}</Text>}
       {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}
       {!!message && <Text accessibilityLiveRegion="polite" style={s.note}>{message}</Text>}

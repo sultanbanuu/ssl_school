@@ -1,8 +1,9 @@
+import MascotLoader from "./MascotLoader";
 import { BackIcon } from "./CourseIcon";
 import { studentContentWidth } from "./student-layout";
 import { LessonBadge } from "./StatusBadge";
 import React, { useRef, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { LessonRescheduleControls } from "./LessonRescheduleControls";
 import { GlassIcon, GlassPressable as Pressable } from "./GlassIcon";
 
@@ -55,7 +56,7 @@ export function StudentLessonViews({ lessons, loading, error, refresh }: { lesso
   }
   return <ScrollView ref={scroll} contentContainerStyle={s.container}>
     <View style={s.sections}>{sections.map(item => <Pressable key={item} accessibilityRole="tab" accessibilityState={{ selected: section === item, disabled: item !== "Lessons" && !selected }} disabled={item !== "Lessons" && !selected} onPress={() => changeSection(item)} style={[s.section, section === item && s.activeSection, item !== "Lessons" && !selected && { opacity: 0.45 }]}><Text style={[s.sectionText, section === item && s.activeText]}>{item}</Text></Pressable>)}</View>
-    {loading && <ActivityIndicator accessibilityLabel="Loading lessons" color="#a49dff" />}
+    {loading && <MascotLoader accessibilityLabel="Loading lessons" />}
     {!!error && <Pressable accessibilityRole="button" onPress={refresh}><Text accessibilityRole="alert" style={s.error}>{error} Tap to retry.</Text></Pressable>}
     {section === "Lessons" ? <>
       <View style={s.titleRow}><View style={{ flex: 1 }}><Text accessibilityRole="header" style={s.title}>Your lessons</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Refresh lessons" onPress={refresh} style={s.refresh}><GlassIcon name="refresh-outline" size={20} color="#a49dff" /></Pressable></View>

@@ -1,9 +1,9 @@
+import MascotLoader from "../MascotLoader";
 import { BackIcon } from "../CourseIcon";
 import { studentContentWidth } from "../student-layout";
 import { Ionicons } from "../Ionicons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   AppState,
   Modal,
   Platform,
@@ -195,10 +195,7 @@ export function Notifications({ profile, onCount }: { profile: Profile; onCount?
           </View>
         )}
         {loading && !items.length ? (
-          <ActivityIndicator
-            color="#255d47"
-            accessibilityLabel="Loading notifications"
-          />
+          <MascotLoader accessibilityLabel="Loading notifications" />
         ) : !items.length && !error ? (
           <View style={s.card}>
             <Text style={s.emptyIcon}>✓</Text>

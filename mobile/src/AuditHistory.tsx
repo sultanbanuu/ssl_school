@@ -1,6 +1,7 @@
+import MascotLoader from "../MascotLoader";
 import { BackIcon } from "../CourseIcon";
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "./api";
 
@@ -52,7 +53,7 @@ export function AuditHistory() {
       <View style={s.row}>{filters.map(value => <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: filter === value }} disabled={loading} onPress={() => setFilter(value)} style={[s.button, filter === value && s.selected]}><Text style={s.text}>{label(value)}</Text></Pressable>)}</View>
       <Pressable accessibilityRole="button" disabled={loading} onPress={() => void load()} style={s.button}><Text style={s.text}>Refresh history</Text></Pressable>
       {!!error && <Text accessibilityRole="alert" style={s.error}>{error} Use Refresh history to retry.</Text>}
-      {loading && <ActivityIndicator accessibilityLabel="Loading audit history" color="#a49dff" />}
+      {loading && <MascotLoader accessibilityLabel="Loading audit history" />}
       {!loading && !error && !items.length && <Text style={s.muted}>No recorded changes yet.</Text>}
       {items.map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`View ${item.entityType} ${item.action}`} onPress={() => setDetail(item)} style={s.card}>
         <Text style={s.heading}>{label(item.entityType)} {item.action}</Text>

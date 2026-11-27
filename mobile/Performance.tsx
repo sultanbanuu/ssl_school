@@ -1,8 +1,9 @@
+import MascotLoader from "./MascotLoader";
 import { BackIcon } from "./CourseIcon";
 import { studentContentWidth } from "./student-layout";
 import { SchoolIcon } from "./SchoolIcon";
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, AppState, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
+import { AppState, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { api, type Profile } from "./src/api";
 import { assessmentSchema, defaultWeights, emptyAssessment, levels, scores, skillLabels, skills, weightsSchema, type Assessment, type Weights } from "../src/shared/performance";
 
@@ -77,7 +78,7 @@ export function Performance({ profile, onFailure, header, onExplore }: { profile
     {header}
     {!!error && <View style={s.card}><Text accessibilityRole="alert" style={s.error}>{error}</Text><Button title="Retry loading" secondary onPress={load} /></View>}
     {!!notice && <Text accessibilityLiveRegion="polite" style={s.success}>{notice}</Text>}
-    {!data ? loading && <ActivityIndicator accessibilityLabel="Loading performance" color="#234b3b" /> : profile.role === "student" ? <StudentPerformance evaluations={data.evaluations} enrolled={data.enrollments.length > 0} onExplore={onExplore} /> : profile.role === "teacher" ? selected ? <TeacherStudent key={selected.studentId} enrollment={selected} evaluations={data.evaluations.filter(e => e.studentId === student)} weights={data.weights} back={() => setStudent("")} onSaved={load} onFailure={onFailure} /> : <>
+    {!data ? loading && <MascotLoader accessibilityLabel="Loading performance" /> : profile.role === "student" ? <StudentPerformance evaluations={data.evaluations} enrolled={data.enrollments.length > 0} onExplore={onExplore} /> : profile.role === "teacher" ? selected ? <TeacherStudent key={selected.studentId} enrollment={selected} evaluations={data.evaluations.filter(e => e.studentId === student)} weights={data.weights} back={() => setStudent("")} onSaved={load} onFailure={onFailure} /> : <>
       <View style={s.card}><Text style={s.number}>{enrolled.length}</Text><Text style={s.muted}>Enrolled students</Text></View>
       <Text style={s.heading}>Your classes</Text><View style={s.wrap}><Button title="All students" secondary={course !== ""} onPress={() => setCourse("")} />{classes.map(([id, title]) => <Button key={id} title={`${title} · ${data.enrollments.filter(e => e.courseId === id).length}`} secondary={course !== id} onPress={() => setCourse(id)} />)}</View>
       <View style={s.card}><Text style={s.heading}>{classes.find(([id]) => id === course)?.[1] || "Student overview"}</Text><Field label="Search students" value={search} onChangeText={setSearch} />{enrolled.filter(e => (!course || data.enrollments.some(x => x.studentId === e.studentId && x.courseId === course)) && name(e).toLowerCase().includes(search.toLowerCase())).map(e => {
@@ -110,7 +111,7 @@ function TeacherStudent({ enrollment, evaluations, weights, back, onSaved, onFai
   return <><Button title={editing ? "← Student profile" : "← All students"} secondary onPress={() => editing ? setEditing(false) : back()} /><Text style={s.title}>{editing ? "Evaluate this lesson." : name(enrollment)}</Text><Text style={s.muted}>{name(enrollment)} · {enrollment.student.performanceLevel || "Level not assigned"}</Text>
     {!!error && <><Text style={s.error}>{error}</Text><Button title="Retry lessons" onPress={load} /></>}
     {editing ? <EvaluationForm key={lessonId} lesson={lessons.find(l => l.id === lessonId)!} existing={current} weights={weights} onSaved={async () => { await onSaved(); setEditing(false); }} onFailure={onFailure} /> : <>
-      <View style={s.card}><Text style={s.heading}>Give a lesson score</Text>{loading ? <ActivityIndicator /> : <><Select label="Lesson date & class" value={lessonId} options={lessons.map(l => ({ value: l.id, label: `${day(l.date)} · ${l.enrollment.course.name}${evaluations.some(e => e.lessonId === l.id) ? " · Assessed" : ""}` }))} onChange={setLessonId} /><Button title={current ? "Adjust score" : "Evaluate lesson"} disabled={!lessonId} onPress={() => setEditing(true)} />{!lessons.length && <Text style={s.muted}>Schedule a lesson for this student to begin assessing.</Text>}</>}</View>
+      <View style={s.card}><Text style={s.heading}>Give a lesson score</Text>{loading ? <MascotLoader accessibilityLabel="Loading lessons" /> : <><Select label="Lesson date & class" value={lessonId} options={lessons.map(l => ({ value: l.id, label: `${day(l.date)} · ${l.enrollment.course.name}${evaluations.some(e => e.lessonId === l.id) ? " · Assessed" : ""}` }))} onChange={setLessonId} /><Button title={current ? "Adjust score" : "Evaluate lesson"} disabled={!lessonId} onPress={() => setEditing(true)} />{!lessons.length && <Text style={s.muted}>Schedule a lesson for this student to begin assessing.</Text>}</>}</View>
       <View style={s.card}><Text style={s.heading}>Lesson history</Text>{[...evaluations].reverse().map(e => <View key={e.id} style={s.card}><Text style={s.heading}>{e.topic}</Text><Text style={s.muted}>{day(e.lesson.date)} · {scores(e.assessment).overall ?? "Incomplete"}{scores(e.assessment).overall !== null && "/100"}</Text>{!!e.assessment.feedback && <Text style={s.text}>{e.assessment.feedback}</Text>}{!!e.assessment.target && <Text style={s.muted}>Next target: {e.assessment.target}</Text>}<Button title="Adjust score" secondary disabled={!lessons.some(l => l.id === e.lessonId)} onPress={() => { setLessonId(e.lessonId); setEditing(true); }} /></View>)}{!evaluations.length && <Text style={s.muted}>No evaluations yet.</Text>}</View>
     </>}
   </>;

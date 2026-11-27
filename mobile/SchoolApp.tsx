@@ -1,9 +1,9 @@
+import MascotLoader from "./MascotLoader";
 import { BackIcon } from "./CourseIcon";
 import { studentContentWidth } from "./student-layout";
 import { StatusBadge } from "./StatusBadge";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   AppState,
   BackHandler,
   Image,
@@ -444,7 +444,7 @@ export function History({
       )}
       <Notice text={error} />
       {loading && !items.length ? (
-        <ActivityIndicator color="#255d47" />
+        <MascotLoader />
       ) : !items.length && !error ? (
         <View style={s.card}>
           <Text style={s.section}>Nothing here yet</Text>
@@ -619,7 +619,7 @@ export function NewPayment({ done }: { done: (id: string) => void }) {
       </Text>
       <Text style={s.section}>01 Choose a course</Text>
       {loading ? (
-        <ActivityIndicator />
+        <MascotLoader accessibilityLabel="Loading courses" />
       ) : (
         courses.map((c) => (
           <Pressable

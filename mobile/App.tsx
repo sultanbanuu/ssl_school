@@ -1,3 +1,4 @@
+import MascotLoader from "./MascotLoader";
 import { phoneSchema } from "../src/shared/phone";
 import React, { lazy, Suspense, useEffect, useState } from "react";
 import * as Linking from "expo-linking";
@@ -575,10 +576,9 @@ export default function App() {
 }
 function OpeningSchool() {
   return (
-    <View style={[s.page, s.loading]} accessibilityRole="progressbar" accessibilityLabel="Opening SSL School" accessibilityState={{ busy: true }}>
+    <View style={[s.page, s.loading]}>
       <StatusBar barStyle="light-content" />
-      <ActivityIndicator size="large" color="#a49dff" />
-      <Text style={s.subtitle}>Opening SSL School…</Text>
+      <MascotLoader size="large" label="Loading" accessibilityLabel="Opening SSL School" />
     </View>
   );
 }
