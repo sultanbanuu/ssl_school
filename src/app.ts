@@ -46,6 +46,8 @@ export function createApp({
       cors({
         origin: origins.filter((o) => /^https?:/.test(o)),
         credentials: true,
+        // Browsers reuse the preflight for 10 minutes instead of sending OPTIONS before every save.
+        maxAge: 600,
       }),
     )
     .onError(({ code, error, set, body, request }) => {

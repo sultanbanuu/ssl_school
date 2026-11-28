@@ -2,7 +2,7 @@ import MascotLoader from "./MascotLoader";
 import { BackIcon } from "./CourseIcon";
 import { studentContentWidth } from "./student-layout";
 import { SchoolIcon } from "./SchoolIcon";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { api, type Profile } from "./src/api";
 import { assessmentSchema, defaultWeights, emptyAssessment, levels, scores, skillLabels, skills, weightsSchema, type Assessment, type Weights } from "../src/shared/performance";
@@ -17,13 +17,23 @@ const message = (e: unknown) => e instanceof Error ? e.message : "Unable to save
 function Button({ title, onPress, disabled, secondary = false }: { title: string; onPress: () => void; disabled?: boolean; secondary?: boolean }) {
   return <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={[s.button, secondary && s.secondary, disabled && { opacity: 0.5 }]}><View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>{title.startsWith("←") && <BackIcon />}<Text style={[s.buttonText, secondary && { color: "#f5f5f3" }]}>{title.replace(/^←\s*/, "")}</Text></View></Pressable>;
 }
-function Field({ label, value, onChangeText, numeric = false, multiline = false }: { label: string; value: string; onChangeText: (v: string) => void; numeric?: boolean; multiline?: boolean }) {
+// Accepts "7,5" as well as "7.5": Azerbaijani and Russian keyboards type a decimal comma.
+const toNumber = (value: string) => Number(value.trim().replace(",", "."));
+// Memoized so a keystroke in one field re-renders only that field, not the whole score form.
+const Field = React.memo(function Field({ label, value, onChangeText, numeric = false, multiline = false }: { label: string; value: string; onChangeText: (v: string) => void; numeric?: boolean; multiline?: boolean }) {
   return <View style={s.field}><Text style={s.label}>{label}</Text><TextInput accessibilityLabel={label} value={value} onChangeText={onChangeText} keyboardType={numeric ? "decimal-pad" : "default"} multiline={multiline} style={[s.input, multiline && { minHeight: 90, textAlignVertical: "top" }]} placeholderTextColor="#758174" /></View>;
-}
-function Select({ label, value, options, onChange }: { label: string; value: string; options: { value: string; label: string }[]; onChange: (v: string) => void }) {
+});
+const Select = React.memo(function Select({ label, value, options, onChange }: { label: string; value: string; options: { value: string; label: string }[]; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false);
-  return <View style={s.field}><Text style={s.label}>{label}</Text><Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ expanded: open }} onPress={() => setOpen(true)} style={s.select}><Text style={[s.text, { flex: 1 }]}>{options.find(o => o.value === value)?.label || "Select…"}</Text><Text style={{ color: "#f5f5f3" }}>⌄</Text></Pressable><Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}><View style={s.overlay}><View style={s.dialog}><Text style={s.heading}>{label}</Text><ScrollView keyboardShouldPersistTaps="handled">{options.map(o => <Pressable accessibilityRole="button" accessibilityState={{ selected: o.value === value }} key={o.value} onPress={() => { onChange(o.value); setOpen(false); }} style={[s.option, o.value === value && s.secondary]}><Text style={s.text}>{o.label}</Text></Pressable>)}{!options.length && <Text style={s.muted}>No options available.</Text>}</ScrollView><Button title="Close" secondary onPress={() => setOpen(false)} /></View></View></Modal></View>;
-}
+  return <View style={s.field}><Text style={s.label}>{label}</Text><Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ expanded: open }} onPress={() => setOpen(true)} style={s.select}><Text style={[s.text, { flex: 1 }]}>{options.find(o => o.value === value)?.label || "Select…"}</Text><Text style={{ color: "#f5f5f3" }}>⌄</Text></Pressable>{open && <Modal visible transparent animationType="fade" onRequestClose={() => setOpen(false)}><View style={s.overlay}><View style={s.dialog}><Text style={s.heading}>{label}</Text><ScrollView keyboardShouldPersistTaps="handled">{options.map(o => <Pressable accessibilityRole="button" accessibilityState={{ selected: o.value === value }} key={o.value} onPress={() => { onChange(o.value); setOpen(false); }} style={[s.option, o.value === value && s.secondary]}><Text style={s.text}>{o.label}</Text></Pressable>)}{!options.length && <Text style={s.muted}>No options available.</Text>}</ScrollView><Button title="Close" secondary onPress={() => setOpen(false)} /></View></View></Modal>}</View>;
+});
+// One-tap choice row: used for scores instead of a dropdown, so each score is a single tap with no dialog.
+const Choice = React.memo(function Choice({ label, value, options, onChange }: { label: string; value: string; options: { value: string; label: string }[]; onChange: (v: string) => void }) {
+  return <View style={s.field} accessibilityRole="radiogroup" accessibilityLabel={label}><Text style={s.label}>{label}</Text><View style={s.choices}>{options.map(o => { const selected = o.value === value; return <Pressable key={o.value} accessibilityRole="radio" accessibilityLabel={`${label}: ${o.label}`} aria-checked={selected} onPress={() => onChange(o.value)} style={({ pressed }) => [s.chip, selected && s.chipSelected, pressed && { opacity: 0.7 }]}><Text style={[s.chipText, selected && s.chipTextSelected]}>{o.label}</Text></Pressable>; })}</View></View>;
+});
+const speakingLabels = ["Task fulfilment", "Fluency", "Intelligibility", "Interaction"];
+const speakingOptions = [{ value: "", label: "–" }, ...[0, 1, 2, 3, 4, 5].map(n => ({ value: String(n), label: String(n) }))];
+const homeworkOptions = ["Not assigned", "Submitted", "Not submitted", "Reviewed"].map(v => ({ value: v, label: v }));
 function Principles() {
   return <View style={s.card}>
     <Text style={s.muted}>Your teacher scores your work in four areas:</Text>
@@ -96,8 +106,9 @@ export function Performance({ profile, onFailure, header, onExplore }: { profile
 }
 function WeightEditor({ weights, save, busy }: { weights: Weights; save: (w: Weights) => Promise<void>; busy: boolean }) {
   const [values, setValues] = useState(() => Object.fromEntries(skills.map(k => [k, String(weights[k])]))) ;
-  const parsed = weightsSchema.safeParse(Object.fromEntries(skills.map(k => [k, values[k].trim() === "" ? NaN : Number(values[k])])));
-  return <View style={s.card}><Text style={s.heading}>Performance weights</Text><Text style={s.muted}>Adjust how each skill contributes. Changes apply to new evaluations; existing scores retain their saved weights.</Text><View style={s.wrap}>{skills.map(k => <Field key={k} label={`${skillLabels[k]} %`} numeric value={values[k]} onChangeText={v => setValues({ ...values, [k]: v })} />)}</View><Text style={parsed.success ? s.muted : s.error}>Total: {skills.reduce((n, k) => n + (Number(values[k]) || 0), 0)}% · Must equal 100%</Text><Button title={busy ? "Saving…" : "Save scoring weights"} disabled={busy || !parsed.success} onPress={() => { if (parsed.success) void save(parsed.data); }} /></View>;
+  const parsed = weightsSchema.safeParse(Object.fromEntries(skills.map(k => [k, values[k].trim() === "" ? NaN : toNumber(values[k])])));
+  const setters = useMemo(() => Object.fromEntries(skills.map(k => [k, (v: string) => setValues(old => ({ ...old, [k]: v }))])), []);
+  return <View style={s.card}><Text style={s.heading}>Performance weights</Text><Text style={s.muted}>Adjust how each skill contributes. Changes apply to new evaluations; existing scores retain their saved weights.</Text><View style={s.wrap}>{skills.map(k => <Field key={k} label={`${skillLabels[k]} %`} numeric value={values[k]} onChangeText={setters[k]} />)}</View><Text style={parsed.success ? s.muted : s.error}>Total: {skills.reduce((n, k) => n + (toNumber(values[k]) || 0), 0)}% · Must equal 100%</Text><Button title={busy ? "Saving…" : "Save scoring weights"} disabled={busy || !parsed.success} onPress={() => { if (parsed.success) void save(parsed.data); }} /></View>;
 }
 function TeacherStudent({ enrollment, evaluations, weights, back, onSaved, onFailure }: { enrollment: Enrollment; evaluations: Evaluation[]; weights: Weights; back: () => void; onSaved: () => Promise<void>; onFailure: (e: unknown) => void }) {
   const [lessons, setLessons] = useState<Lesson[]>([]);
@@ -105,45 +116,73 @@ function TeacherStudent({ enrollment, evaluations, weights, back, onSaved, onFai
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [saved, setSaved] = useState("");
   const load = async () => { setLoading(true); try { setLessons(await api<Lesson[]>(`/performance/students/${enrollment.studentId}/lessons`)); setError(""); } catch (e) { setError(message(e)); onFailure(e); } finally { setLoading(false); } };
   useEffect(() => { void load(); }, [enrollment.studentId]);
   const current = evaluations.find(e => e.lessonId === lessonId);
+  const lesson = lessons.find(l => l.id === lessonId);
+  const open = (id: string) => { setLessonId(id); setSaved(""); setEditing(true); };
   return <><Button title={editing ? "← Student profile" : "← All students"} secondary onPress={() => editing ? setEditing(false) : back()} /><Text style={s.title}>{editing ? "Evaluate this lesson." : name(enrollment)}</Text><Text style={s.muted}>{name(enrollment)} · {enrollment.student.performanceLevel || "Level not assigned"}</Text>
     {!!error && <><Text style={s.error}>{error}</Text><Button title="Retry lessons" onPress={load} /></>}
-    {editing ? <EvaluationForm key={lessonId} lesson={lessons.find(l => l.id === lessonId)!} existing={current} weights={weights} onSaved={async () => { await onSaved(); setEditing(false); }} onFailure={onFailure} /> : <>
-      <View style={s.card}><Text style={s.heading}>Give a lesson score</Text>{loading ? <MascotLoader accessibilityLabel="Loading lessons" /> : <><Select label="Lesson date & class" value={lessonId} options={lessons.map(l => ({ value: l.id, label: `${day(l.date)} · ${l.enrollment.course.name}${evaluations.some(e => e.lessonId === l.id) ? " · Assessed" : ""}` }))} onChange={setLessonId} /><Button title={current ? "Adjust score" : "Evaluate lesson"} disabled={!lessonId} onPress={() => setEditing(true)} />{!lessons.length && <Text style={s.muted}>Schedule a lesson for this student to begin assessing.</Text>}</>}</View>
-      <View style={s.card}><Text style={s.heading}>Lesson history</Text>{[...evaluations].reverse().map(e => <View key={e.id} style={s.card}><Text style={s.heading}>{e.topic}</Text><Text style={s.muted}>{day(e.lesson.date)} · {scores(e.assessment).overall ?? "Incomplete"}{scores(e.assessment).overall !== null && "/100"}</Text>{!!e.assessment.feedback && <Text style={s.text}>{e.assessment.feedback}</Text>}{!!e.assessment.target && <Text style={s.muted}>Next target: {e.assessment.target}</Text>}<Button title="Adjust score" secondary disabled={!lessons.some(l => l.id === e.lessonId)} onPress={() => { setLessonId(e.lessonId); setEditing(true); }} /></View>)}{!evaluations.length && <Text style={s.muted}>No evaluations yet.</Text>}</View>
+    {!editing && !!saved && <View style={s.savedCard}><Text style={s.savedTick}>✓</Text><Text accessibilityLiveRegion="polite" style={[s.text, { flex: 1 }]}>{saved}</Text></View>}
+    {editing && lesson ? <EvaluationForm key={lessonId} lesson={lesson} existing={current} weights={weights} onSaved={topic => {
+      // Close straight away; the refreshed list arrives in the background.
+      setSaved(`Saved “${topic}” · ${day(lesson.date)}. The student can see it now.`);
+      setEditing(false);
+      void onSaved();
+    }} onFailure={onFailure} /> : <>
+      <View style={s.card}><Text style={s.heading}>Give a lesson score</Text>{loading ? <MascotLoader accessibilityLabel="Loading lessons" /> : <><Select label="Lesson date & class" value={lessonId} options={lessons.map(l => ({ value: l.id, label: `${day(l.date)} · ${l.enrollment.course.name}${evaluations.some(e => e.lessonId === l.id) ? " · Assessed" : ""}` }))} onChange={setLessonId} /><Button title={current ? "Adjust score" : "Evaluate lesson"} disabled={!lessonId} onPress={() => open(lessonId)} />{!lessons.length && <Text style={s.muted}>Schedule a lesson for this student to begin assessing.</Text>}</>}</View>
+      <View style={s.card}><Text style={s.heading}>Lesson history</Text>{[...evaluations].reverse().map(e => <View key={e.id} style={s.card}><Text style={s.heading}>{e.topic}</Text><Text style={s.muted}>{day(e.lesson.date)} · {scores(e.assessment).overall ?? "Incomplete"}{scores(e.assessment).overall !== null && "/100"}</Text>{!!e.assessment.feedback && <Text style={s.text}>{e.assessment.feedback}</Text>}{!!e.assessment.target && <Text style={s.muted}>Next target: {e.assessment.target}</Text>}<Button title="Adjust score" secondary disabled={!lessons.some(l => l.id === e.lessonId)} onPress={() => open(e.lessonId)} /></View>)}{!evaluations.length && <Text style={s.muted}>No evaluations yet.</Text>}</View>
     </>}
   </>;
 }
-function EvaluationForm({ lesson, existing, weights, onSaved, onFailure }: { lesson: Lesson; existing?: Evaluation; weights: Weights; onSaved: () => Promise<void>; onFailure: (e: unknown) => void }) {
-  const initial = existing?.assessment || emptyAssessment(weights);
+const pointKeys = ["vocabulary", "listening", "sentenceStructure"] as const;
+type PointKey = typeof pointKeys[number];
+type PointText = Record<PointKey, { earned: string; possible: string }>;
+function EvaluationForm({ lesson, existing, weights, onSaved, onFailure }: { lesson: Lesson; existing?: Evaluation; weights: Weights; onSaved: (topic: string) => void; onFailure: (e: unknown) => void }) {
+  const [initial] = useState(() => existing?.assessment || emptyAssessment(weights));
   const [topic, setTopic] = useState(existing?.topic || "");
-  const [speaking, setSpeaking] = useState(initial.speaking.map(v => v === null ? "" : String(v)));
-  const pointKeys = ["vocabulary", "listening", "sentenceStructure"] as const;
-  const [points, setPoints] = useState(() => Object.fromEntries(pointKeys.map(k => [k, { earned: initial[k].earned === null ? "" : String(initial[k].earned), possible: String(initial[k].possible) }])));
+  const [speaking, setSpeaking] = useState(() => initial.speaking.map(v => v === null ? "" : String(v)));
+  const [points, setPoints] = useState<PointText>(() => Object.fromEntries(pointKeys.map(k => [k, { earned: initial[k].earned === null ? "" : String(initial[k].earned), possible: String(initial[k].possible) }])) as PointText);
   const [homework, setHomework] = useState(initial.homework);
   const [feedback, setFeedback] = useState(initial.feedback);
   const [target, setTarget] = useState(initial.target);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const assessment = assessmentSchema.safeParse({ weights: initial.weights, speaking: speaking.map(v => v === "" ? null : Number(v)), ...Object.fromEntries(pointKeys.map(k => [k, { earned: points[k].earned.trim() === "" ? null : Number(points[k].earned), possible: points[k].possible.trim() === "" ? NaN : Number(points[k].possible) }])), homework, feedback, target });
-  const result = assessment.success ? scores(assessment.data) : null;
+  // Functional updates keep every keystroke even when several arrive before React re-renders,
+  // and stable callbacks let the memoized fields skip re-rendering while another field is typed in.
+  const handlers = useMemo(() => ({
+    speaking: speakingLabels.map((_, i) => (v: string) => setSpeaking(old => old.map((x, j) => i === j ? v : x))),
+    points: Object.fromEntries(pointKeys.map(k => [k, {
+      earned: (v: string) => setPoints(old => ({ ...old, [k]: { ...old[k], earned: v } })),
+      possible: (v: string) => setPoints(old => ({ ...old, [k]: { ...old[k], possible: v } })),
+    }])) as Record<PointKey, { earned: (v: string) => void; possible: (v: string) => void }>,
+    homework: (v: string) => setHomework(v as Assessment["homework"]),
+  }), []);
+  // Only the score inputs feed the preview: typing feedback or the topic does not re-validate scores.
+  const scored = useMemo(() => assessmentSchema.safeParse({
+    weights: initial.weights, speaking: speaking.map(v => v === "" ? null : Number(v)),
+    ...Object.fromEntries(pointKeys.map(k => [k, { earned: points[k].earned.trim() === "" ? null : toNumber(points[k].earned), possible: points[k].possible.trim() === "" ? NaN : toNumber(points[k].possible) }])),
+    homework: "Not assigned", feedback: "", target: "",
+  }), [initial, speaking, points]);
+  const result = useMemo(() => scored.success ? scores(scored.data) : null, [scored]);
+  const tooLong = feedback.length > 4000 || target.length > 1000;
+  const ready = scored.success && !tooLong && !!topic.trim();
   const save = async () => {
-    if (!assessment.success || !topic.trim() || busy) return;
+    if (!scored.success || !ready || busy) return;
     setBusy(true); setError("");
-    try { await api(`/performance/lessons/${lesson.id}`, { topic, assessment: assessment.data }, "PUT"); await onSaved(); }
-    catch (e) { setError(message(e)); onFailure(e); }
-    finally { setBusy(false); }
+    const assessment = { ...scored.data, homework, feedback, target };
+    try { await api(`/performance/lessons/${lesson.id}`, { topic: topic.trim(), assessment }, "PUT"); onSaved(topic.trim()); }
+    catch (e) { setError(message(e)); onFailure(e); setBusy(false); }
   };
   return <>
     <View style={s.card}><Text style={s.heading}>Lesson details</Text><Text style={s.muted}>{day(lesson.date)} · {lesson.enrollment.course.name}</Text><Field label="Lesson topic" value={topic} onChangeText={setTopic} /></View>
     <View style={s.hero}><Text style={s.heroLabel}>LIVE SCORE PREVIEW</Text><Text style={s.heroNumber}>{result?.overall ?? "—"}<Text style={s.heroSmall}> /100</Text></Text>{skills.map(k => <View key={k} style={s.between}><Text style={s.heroSmall}>{skillLabels[k]}</Text><Text style={s.heroSmall}>{result?.categories[k] == null ? "Not assessed" : `${Math.round(result.categories[k]!)} /100`}</Text></View>)}<Text style={s.heroSmall}>{result?.overall == null ? "Incomplete · Unassessed categories are not zero." : "All weighted categories assessed."}</Text></View>
-    <View style={s.card}><View style={s.between}><Text style={s.heading}>01 · Speaking</Text><Text style={s.badge}>{initial.weights.speaking}% weight</Text></View><Text style={s.muted}>Assess against the student's level. 0 = not demonstrated; 5 = independently successful.</Text>{["Task fulfilment", "Fluency", "Intelligibility", "Interaction"].map((label, i) => <Select key={label} label={label} value={speaking[i]} options={[{ value: "", label: "Not assessed" }, ...[0,1,2,3,4,5].map(n => ({ value: String(n), label: String(n) }))]} onChange={v => setSpeaking(speaking.map((old, j) => i === j ? v : old))} />)}</View>
-    {pointKeys.map((k, i) => <View key={k} style={s.card}><View style={s.between}><Text style={s.heading}>0{i + 2} · {skillLabels[k]}</Text><Text style={s.badge}>{initial.weights[k]}% weight</Text></View><Text style={s.muted}>{k === "vocabulary" ? "Recall and use in context." : k === "listening" ? "Main idea, details and implied meaning." : "Ten sentences, each assessed from 0 to 2 points by default."}</Text><View style={s.wrap}><Field label={`${skillLabels[k]} points earned`} numeric value={points[k].earned} onChangeText={v => setPoints({ ...points, [k]: { ...points[k], earned: v } })} /><Field label={`${skillLabels[k]} points possible`} numeric value={points[k].possible} onChangeText={v => setPoints({ ...points, [k]: { ...points[k], possible: v } })} /></View></View>)}
-    <View style={s.card}><Text style={s.heading}>Homework & feedback</Text><Select label="Homework status · separate from performance" value={homework} options={["Not assigned", "Submitted", "Not submitted", "Reviewed"].map(v => ({ value: v, label: v }))} onChange={v => setHomework(v as Assessment["homework"])} /><Field label="Feedback for the student" multiline value={feedback} onChangeText={setFeedback} /><Field label="Next learning target" value={target} onChangeText={setTarget} /></View>
-    {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}{!assessment.success && <Text accessibilityRole="alert" style={s.error}>Check your points: earned must be between zero and points possible; points possible must be greater than zero. Feedback is limited to 4,000 characters and targets to 1,000.</Text>}
-    <Text style={s.muted}>Save makes feedback and assessed skills visible to the student immediately. You can adjust scores later.</Text><Button title={busy ? "Saving…" : existing ? "Save score changes" : "Save evaluation"} disabled={busy || !assessment.success || !topic.trim()} onPress={save} />
+    <View style={s.card}><View style={s.between}><Text style={s.heading}>01 · Speaking</Text><Text style={s.badge}>{initial.weights.speaking}% weight</Text></View><Text style={s.muted}>Assess against the student's level. 0 = not demonstrated; 5 = independently successful; – = not assessed.</Text>{speakingLabels.map((label, i) => <Choice key={label} label={label} value={speaking[i]!} options={speakingOptions} onChange={handlers.speaking[i]!} />)}</View>
+    {pointKeys.map((k, i) => <View key={k} style={s.card}><View style={s.between}><Text style={s.heading}>0{i + 2} · {skillLabels[k]}</Text><Text style={s.badge}>{initial.weights[k]}% weight</Text></View><Text style={s.muted}>{k === "vocabulary" ? "Recall and use in context." : k === "listening" ? "Main idea, details and implied meaning." : "Ten sentences, each assessed from 0 to 2 points by default."}</Text><View style={s.wrap}><Field label={`${skillLabels[k]} points earned`} numeric value={points[k].earned} onChangeText={handlers.points[k].earned} /><Field label={`${skillLabels[k]} points possible`} numeric value={points[k].possible} onChangeText={handlers.points[k].possible} /></View></View>)}
+    <View style={s.card}><Text style={s.heading}>Homework & feedback</Text><Choice label="Homework status · separate from performance" value={homework} options={homeworkOptions} onChange={handlers.homework} /><Field label="Feedback for the student" multiline value={feedback} onChangeText={setFeedback} /><Field label="Next learning target" value={target} onChangeText={setTarget} /></View>
+    {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}{!scored.success && <Text accessibilityRole="alert" style={s.error}>Check your points: earned must be between zero and points possible; points possible must be greater than zero.</Text>}{tooLong && <Text accessibilityRole="alert" style={s.error}>Feedback is limited to 4,000 characters and the next target to 1,000.</Text>}
+    <Text style={s.muted}>Save makes feedback and assessed skills visible to the student immediately. You can adjust scores later.</Text><Button title={busy ? "Saving…" : existing ? "Save score changes" : "Save evaluation"} disabled={busy || !ready} onPress={save} />
   </>;
 }
 
@@ -199,5 +238,7 @@ const s = StyleSheet.create({
   button: { minHeight: 44, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 11, backgroundColor: "#7064ed", justifyContent: "center", alignSelf: "flex-start" }, buttonText: { color: "#f5f5f3", fontSize: 13, fontWeight: "600" }, secondary: { backgroundColor: "#272727" }, badge: { backgroundColor: "#272727", paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7, color: "#b5b5b5", fontSize: 11, alignSelf: "flex-start" },
   number: { color: "#f5f5f3", fontSize: 28, fontWeight: "700" }, studentRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 15, borderBottomWidth: 1, borderColor: "#3d3d3d" }, avatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: "#272727", justifyContent: "center", alignItems: "center" },
   hero: { backgroundColor: "#7064ed", borderRadius: 21, padding: 22, gap: 18 }, heroLabel: { color: "#f0edff", fontSize: 11, fontWeight: "700", letterSpacing: 1.2 }, heroNumber: { color: "#f5f5f3", fontSize: 52, fontWeight: "500" }, heroSmall: { color: "#f5f5f3", fontSize: 12, lineHeight: 20 }, skillIcon: { backgroundColor: "#272727", color: "#f5f5f3", alignSelf: "flex-start", borderRadius: 9, padding: 10, fontSize: 20 }, track: { height: 5, borderRadius: 4, backgroundColor: "#272727", overflow: "hidden" }, fill: { height: 5, backgroundColor: "#39b971", borderRadius: 4 }, feedback: { gap: 10, borderTopWidth: 1, borderColor: "#3d3d3d", paddingTop: 15 },
+  choices: { flexDirection: "row", flexWrap: "wrap", gap: 8 }, chip: { minWidth: 44, minHeight: 40, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: "#3d3d3d", backgroundColor: "#1f1f1f", alignItems: "center", justifyContent: "center" }, chipSelected: { backgroundColor: "#7064ed", borderColor: "#7064ed" }, chipText: { color: "#b5b5b5", fontSize: 14, fontWeight: "600" }, chipTextSelected: { color: "#f5f5f3" },
+  savedCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#1d3328", borderWidth: 1, borderColor: "#39b971", borderRadius: 16, padding: 14 }, savedTick: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#39b971", color: "#0f1f17", fontWeight: "800", textAlign: "center", lineHeight: 28, overflow: "hidden" },
   error: { color: "#ff9b90", lineHeight: 21 }, success: { color: "#f5f5f3", padding: 10, lineHeight: 21 }, overlay: { flex: 1, backgroundColor: "#12251c88", padding: 22, alignItems: "center", justifyContent: "center" }, dialog: { width: "100%", maxWidth: 480, maxHeight: "80%", borderRadius: 20, backgroundColor: "#272727", padding: 18, gap: 16 }, option: { minHeight: 48, padding: 14, borderRadius: 8 },
 });
