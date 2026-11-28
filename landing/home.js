@@ -63,16 +63,32 @@ function homeConsultation() {
           </svg>
           <div class="contact-paper-track">
             <form class="contact-form paper-sheet">
-              <label>Ad və soyad<input name="name" autocomplete="name" maxlength="100" required></label>
-              <label>Telefon nömrəsi<input name="phone" type="tel" autocomplete="tel" maxlength="35"></label>
-              <label>Qeyd<textarea name="note" rows="2" maxlength="500"></textarea></label>
-              <button class="text-link yellow-underline" type="submit" lang="en">Done</button>
-              <div class="contact-message" hidden>
-                <label>Instagram üçün mesaj<textarea readonly rows="5"></textarea></label>
-                <div class="text-actions">
-                  <button type="button" class="text-link" data-copy>Mesajı kopyala</button>
-                  <a class="text-link" href="https://www.instagram.com/sslschool.az/" target="_blank" rel="noopener">Instagram-ı aç</a>
+              <div class="contact-fields">
+                <label>Ad və soyad<input name="name" autocomplete="name" maxlength="100" required></label>
+                <label>Telefon nömrəsi<input name="phone" type="tel" autocomplete="tel" maxlength="35" required></label>
+                <label class="contact-trap" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
+                <label>Qeyd<textarea name="note" rows="2" maxlength="500"></textarea></label>
+                <button class="text-link yellow-underline" type="submit" lang="en">Done</button>
+                <div class="contact-message" hidden>
+                  <label>Instagram üçün mesaj<textarea readonly rows="5"></textarea></label>
+                  <div class="text-actions">
+                    <button type="button" class="text-link" data-copy>Mesajı kopyala</button>
+                    <a class="text-link" href="https://www.instagram.com/sslschool.az/" target="_blank" rel="noopener">Instagram-ı aç</a>
+                  </div>
                 </div>
+              </div>
+              <div class="contact-sent" hidden>
+                <span class="contact-sent-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.5L19 7.5"/></svg>
+                </span>
+                <h3 class="contact-sent-title" tabindex="-1">Müraciətin göndərildi</h3>
+                <p class="contact-sent-intro">Tezliklə səninlə əlaqə saxlayacağıq.</p>
+                <dl class="contact-sent-details">
+                  <div><dt>Ad və soyad</dt><dd data-sent="name"></dd></div>
+                  <div><dt>Telefon</dt><dd data-sent="phone"></dd></div>
+                  <div data-sent-row="note"><dt>Qeyd</dt><dd data-sent="note"></dd></div>
+                </dl>
+                <button type="button" class="text-link yellow-underline" data-again>Yeni müraciət yarat</button>
               </div>
               <p class="contact-status" role="status"></p>
             </form>
@@ -189,21 +205,121 @@ function setupContact(courseTitle) {
     status.textContent = '';
   });
 
-  form.addEventListener('submit', event => {
+  const submit = form.querySelector('button[type="submit"]');
+  const fields = form.querySelector('.contact-fields');
+  const sent = form.querySelector('.contact-sent');
+  const again = sent.querySelector('[data-again]');
+  const api = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? 'http://localhost:3000' : 'https://api.sslschool.az';
+
+  // Mirrors the API limit (4 attempts an hour) so a visitor hears about it before sending.
+  const attemptLimit = 4;
+  const attemptWindow = 60 * 60 * 1000;
+  const attemptsKey = 'ssl-consultation-attempts';
+  let blockedUntil = 0;
+
+  function recentAttempts() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(attemptsKey) || '[]');
+      return Array.isArray(saved) ? saved.filter(at => Date.now() - at < attemptWindow) : [];
+    } catch {
+      return [];
+    }
+  }
+  function rememberAttempt() {
+    try { localStorage.setItem(attemptsKey, JSON.stringify([...recentAttempts(), Date.now()])); } catch {}
+  }
+  function waitUntil() {
+    const attempts = recentAttempts();
+    const local = attempts.length >= attemptLimit ? attempts[attempts.length - attemptLimit] + attemptWindow : 0;
+    return Math.max(local, blockedUntil);
+  }
+  function limitMessage(until) {
+    const minutes = Math.max(1, Math.ceil((until - Date.now()) / 60000));
+    return `Çox sayda cəhd etdin. ${minutes} dəqiqə sonra yenidən yoxla və ya Instagram-da yaz.`;
+  }
+  function refreshAgain() {
+    const until = waitUntil();
+    const limited = until > Date.now();
+    again.disabled = limited;
+    again.textContent = limited ? limitMessage(until) : 'Yeni müraciət yarat';
+  }
+
+  function showSent(request) {
+    for (const key of ['name', 'phone', 'note']) sent.querySelector(`[data-sent="${key}"]`).textContent = request[key];
+    sent.querySelector('[data-sent-row="note"]').hidden = !request.note;
+    status.textContent = '';
+    fields.hidden = true;
+    sent.hidden = false;
+    form.classList.remove('is-new-sheet');
+    void form.offsetWidth;
+    form.classList.add('is-new-sheet');
+    refreshAgain();
+    sent.querySelector('.contact-sent-title').focus({ preventScroll: true });
+  }
+
+  again.addEventListener('click', () => {
+    if (waitUntil() > Date.now()) return refreshAgain();
+    // Keep the previous answers so the visitor only edits what changed.
+    sent.hidden = true;
+    fields.hidden = false;
+    form.classList.remove('is-new-sheet');
+    void form.offsetWidth;
+    form.classList.add('is-new-sheet');
+    form.elements.namedItem('name').focus({ preventScroll: true });
+  });
+
+  form.addEventListener('submit', async event => {
     event.preventDefault();
+    if (submit.disabled) return;
     const values = new FormData(form);
-    const phone = values.get('phone').trim();
-    const note = values.get('note').trim();
-    field.value = [
-      'Salam, SSL School!',
-      'Konsultasiya üçün müraciət etmək istərdim.',
-      `Ad və soyad: ${values.get('name').trim()}`,
-      phone && `Telefon: ${phone}`,
-      note && `Qeyd: ${note}`,
-    ].filter(Boolean).join('\n');
-    message.hidden = false;
-    status.textContent = 'Mesaj hazırdır. Kopyala və Instagram-da göndər.';
-    field.focus();
+    const request = {
+      name: values.get('name').trim(),
+      phone: values.get('phone').trim(),
+      note: values.get('note').trim(),
+      website: values.get('website'),
+    };
+    message.hidden = true;
+    const until = waitUntil();
+    if (until > Date.now()) {
+      status.textContent = limitMessage(until);
+      return;
+    }
+    submit.disabled = true;
+    status.textContent = 'Göndərilir…';
+    try {
+      rememberAttempt();
+      const response = await fetch(`${api}/api/consultation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+      });
+      if (response.status === 422) {
+        status.textContent = 'Telefon nömrəsini yoxla: yalnız rəqəmlər, məsələn +994 50 123 45 67.';
+        return;
+      }
+      if (response.status === 429) {
+        const seconds = Number(response.headers.get('retry-after')) || 3600;
+        blockedUntil = Date.now() + seconds * 1000;
+        status.textContent = limitMessage(blockedUntil);
+        return;
+      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      showSent(request);
+    } catch {
+      // Email delivery is down: fall back to a ready-made Instagram message.
+      field.value = [
+        'Salam, SSL School!',
+        'Konsultasiya üçün müraciət etmək istərdim.',
+        `Ad və soyad: ${request.name}`,
+        `Telefon: ${request.phone}`,
+        request.note && `Qeyd: ${request.note}`,
+      ].filter(Boolean).join('\n');
+      message.hidden = false;
+      status.textContent = 'Müraciəti göndərmək alınmadı. Mesajı kopyala və Instagram-da göndər.';
+      field.focus();
+    } finally {
+      submit.disabled = false;
+    }
   });
 
   form.querySelector('[data-copy]').addEventListener('click', async () => {

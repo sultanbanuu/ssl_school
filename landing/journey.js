@@ -205,7 +205,7 @@ function setupJourney(animationsPaused) {
     const cardRoom = Math.max(0, (height - slides.at(-1).offsetHeight - 28) / 2);
     const restY = Math.min(height * (compact ? 0.14 : 0.025), cardRoom);
 
-    slides.forEach((slide, index) => {
+    for (const [index, slide] of slides.entries()) {
       const offset = position - index;
       const answer = index === slides.length - 1;
       const lean = compact ? 3 : 5;
@@ -220,9 +220,15 @@ function setupJourney(animationsPaused) {
       const roll = tilt + 26 * arrival - 67 * pull ** 1.15;
       const yaw = -45 * arrival + 50 * pull;
       const scale = 1 - 0.18 * arrival - 0.96 * pull ** 1.18;
+      const opacity = 1 - Math.max(smoothUnit((arrival - 0.44) / 0.52), smoothUnit((pull - 0.54) / 0.43));
+      // A card that has faded out (or shrunk into the hole) leaves rendering entirely: iOS Safari otherwise
+      // keeps painting its antialiased edges as thin white lines while the deck scrolls slowly.
+      const gone = opacity < 0.02 || scale < 0.06;
+      slide.style.visibility = gone ? 'hidden' : '';
+      if (gone) continue;
       slide.style.transform = `translate3d(${x}px,${y}px,0) rotate(${roll}deg) rotateY(${yaw}deg) scale(${scale})`;
-      slide.style.opacity = 1 - Math.max(smoothUnit((arrival - 0.44) / 0.52), smoothUnit((pull - 0.54) / 0.43));
-    });
+      slide.style.opacity = opacity;
+    }
 
     paintTunnel(width, height, hole, time, release);
     pin.style.setProperty('--deck-release', release);

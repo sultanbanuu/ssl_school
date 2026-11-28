@@ -70,13 +70,14 @@
 .home-contact .section-split { align-items: start; }
 .home-contact .text-link { display: inline-flex; align-items: center; }
 .home-contact .section-intro + .text-link { margin-top: 12px; }
-.contact-form { display: grid; gap: 12px; }
-.contact-form > label, .contact-message > label { display: grid; gap: 3px; }
+.contact-form, .contact-fields { display: grid; gap: 12px; }
+.contact-fields[hidden], .contact-sent[hidden] { display: none; }
+.contact-fields > label, .contact-message > label { display: grid; gap: 3px; }
 .contact-form input:not([type="radio"]), .contact-form textarea { width: 100%; min-height: 39px; padding: 4px 0; border: 0; border-bottom: 1px solid #ac8eb9; border-radius: 0; font: 600 1rem/1.5 var(--body); color: var(--ink); background: transparent; }
 .contact-form textarea { resize: vertical; }
 .contact-form textarea[name="note"] { resize: none; }
 .contact-form label { color: #4a3a4f; font-size: .92rem; font-weight: 800; }
-.contact-form > button { justify-self: start; }
+.contact-fields > button { justify-self: start; }
 .contact-message .text-actions { margin-top: 10px; }
 .contact-status { color: #463649; line-height: 1.45; }
 .contact-status:empty { display: none; }

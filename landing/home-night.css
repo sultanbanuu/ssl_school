@@ -214,9 +214,12 @@
 .contact-paper.is-extracted .contact-form { filter: drop-shadow(0 12px 17px #374e6a26); }
 .contact-folder-back, .contact-folder-front, .contact-folder-open {
   position: absolute;
-  inset: auto 6% var(--folder-rise);
+  inset: auto 6% 0;
   height: var(--pocket-height);
+  /* Moved with a transform, not bottom, so scrolling the folder never triggers layout. */
+  transform: translateY(calc(-1 * var(--folder-rise)));
 }
+.motion-playing .contact-paper:not(.is-extracted) :is(.contact-form, .contact-folder-back, .contact-folder-front) { will-change: transform; }
 .contact-folder-back, .contact-folder-front { pointer-events: none; }
 .contact-folder-back {
   width: 88%;
@@ -241,4 +244,39 @@
   [data-home-sky="reviews"]::before { background-position: 91% 8%, 7% 40%, 94% 86%; }
   [data-home-sky="faq"]::before { background-position: 91% 12%, 3% 71%, 95% 46%; }
   [data-home-sky="contact"]::before { background-position: 7% 43%, 93% 12%, 95% 83%; }
+}
+/* Anti-spam field: off-screen for people, still filled in by simple bots. */
+.contact-form .contact-trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+/* Sent state: a fresh sheet slides onto the old one and confirms what was sent. */
+.contact-sent { display: grid; justify-items: start; gap: 6px; }
+.contact-sent-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 4px;
+  border: 2px solid #2f8a5b;
+  border-radius: 50%;
+  color: #2f8a5b;
+  background: #e6f5ec;
+  rotate: -6deg;
+}
+.contact-sent-title { margin: 0; color: #24193a; font-size: clamp(1.25rem, 2.4vw, 1.6rem); letter-spacing: -.04em; }
+.contact-sent-title:focus { outline: none; }
+.contact-sent-intro { margin: 0 0 6px; color: #544562; }
+.contact-sent-details { display: grid; gap: 8px; width: 100%; margin: 0 0 8px; padding: 10px 0; border-block: 1px dashed #9db6cc; }
+.contact-sent-details > div { display: grid; grid-template-columns: minmax(92px, auto) 1fr; gap: 10px; }
+.contact-sent-details > div[hidden] { display: none; }
+.contact-sent-details dt { color: #6d5d7a; font-size: .86rem; font-weight: 700; }
+.contact-sent-details dd { margin: 0; color: #203650; font-weight: 700; overflow-wrap: anywhere; white-space: pre-line; }
+.contact-sent [data-again]:disabled { color: #6d5d7a; text-decoration: none; cursor: default; font-weight: 600; text-align: left; }
+.contact-form.is-new-sheet::before { animation: contact-new-sheet 560ms cubic-bezier(.2,.75,.3,1) both; }
+.contact-form.is-new-sheet > :is(.contact-fields, .contact-sent) { animation: contact-new-ink 420ms 140ms ease-out both; }
+.contact-form.is-new-sheet .contact-sent-icon { animation: contact-stamp 520ms 260ms cubic-bezier(.3,1.6,.5,1) both; }
+@keyframes contact-new-sheet { from { transform: translate(26px, -18px) rotate(3deg); opacity: .5; } }
+@keyframes contact-new-ink { from { opacity: 0; transform: translateY(8px); } }
+@keyframes contact-stamp { from { opacity: 0; scale: 1.6; } }
+@media (prefers-reduced-motion: reduce) {
+  .contact-form.is-new-sheet::before, .contact-form.is-new-sheet > *, .contact-form.is-new-sheet .contact-sent-icon { animation: none; }
 }

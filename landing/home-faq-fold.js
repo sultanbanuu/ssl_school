@@ -130,26 +130,34 @@ function setupScrollPapers() {
     const playing = root.classList.contains('motion-playing');
     const viewport = viewportHeight();
     const keyboardOpen = viewport < innerHeight - 90;
-    for (const paper of papers) {
-      const { flight, scene, area, sheet, opener, draw } = paper;
+    const active = document.activeElement;
+    // Read every paper's layout first, then write: mixing the two forces extra layouts each scroll frame.
+    const states = papers.map(paper => {
+      const { flight, scene, area, sheet, draw } = paper;
       const bounds = area.getBoundingClientRect();
       const { distance, runway } = getPaperScrollRange(flight, scene, bounds, viewport, Boolean(draw));
-      const active = document.activeElement;
       const editing = keyboardOpen && sheet.contains(active) && active.matches('input, textarea');
       const progress = playing && !editing && runway > 0 ? clampUnit(distance / runway) : 1;
+      return { paper, bounds, progress, width: draw ? area.clientWidth : 0, height: draw ? area.clientHeight : 0 };
+    });
+
+    for (const { paper, bounds, progress, width, height } of states) {
+      const { area, sheet, opener, draw } = paper;
       const folded = playing && progress < .985;
-      sheet.inert = folded;
-      opener.hidden = !folded;
+      if (sheet.inert !== folded) sheet.inert = folded;
+      if (opener.hidden === folded) opener.hidden = !folded;
 
       if (draw) {
-        area.style.setProperty('--faq-ink', smoothUnit((progress - .72) / .28));
-        area.style.setProperty('--faq-mesh', 1 - smoothUnit((progress - .78) / .22));
-        const width = area.clientWidth;
-        const height = area.clientHeight;
         const dirty = progress !== paper.progress || width !== paper.width || height !== paper.height;
+        if (progress !== paper.progress) {
+          area.style.setProperty('--faq-ink', smoothUnit((progress - .72) / .28));
+          area.style.setProperty('--faq-mesh', 1 - smoothUnit((progress - .78) / .22));
+        }
         if (playing && dirty && progress < 1 && bounds.bottom > 0 && bounds.top < viewport) {
           draw(width, height, progress);
           Object.assign(paper, { progress, width, height });
+        } else if (progress >= 1) {
+          paper.progress = progress;
         }
       } else if (progress !== paper.progress) {
         const lift = smoothUnit(progress);
@@ -161,7 +169,7 @@ function setupScrollPapers() {
 
       if (!folded && paper.focusSheet) {
         paper.focusSheet = false;
-        sheet.querySelector('.faq-toggle, input').focus({ preventScroll: true });
+        [...sheet.querySelectorAll('.faq-toggle, input, .contact-sent-title')].find(target => target.getClientRects().length)?.focus({ preventScroll: true });
       }
     }
   }
