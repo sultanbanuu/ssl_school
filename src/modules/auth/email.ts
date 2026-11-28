@@ -8,6 +8,20 @@ export async function sendPasswordResetEmail(config: Config, email: string, url:
   return sendAuthEmail(config, email, "Reset your SSL School password", `Reset your password using this link:\n${url}\n\nThis link expires in one hour and can only be used once. If you didn't request a password reset, ignore this email. Your password will stay unchanged.`, send);
 }
 
+export async function sendConsultationEmail(config: Config, request: { name: string; phone: string; note: string }, send: typeof fetch = fetch) {
+  const name = request.name.replace(/\s+/g, " ");
+  const text = [
+    "Saytdan yeni konsultasiya müraciəti gəldi.",
+    "",
+    `Ad və soyad: ${request.name}`,
+    `Telefon: ${request.phone}`,
+    `Qeyd: ${request.note || "—"}`,
+    "",
+    `Göndərilmə vaxtı: ${new Date().toLocaleString("az-AZ", { timeZone: "Asia/Baku" })} (Bakı)`,
+  ].join("\n");
+  return sendAuthEmail(config, config.CONSULTATION_EMAIL ?? "admin.sslschool@gmail.com", `Yeni konsultasiya müraciəti: ${name}`, text, send);
+}
+
 async function sendAuthEmail(config: Config, email: string, subject: string, text: string, send: typeof fetch) {
   if (!config.RESEND_API_KEY || !config.EMAIL_FROM) {
     throw new Error("Email delivery is not configured. Set RESEND_API_KEY and EMAIL_FROM.");
@@ -32,7 +46,7 @@ async function sendAuthEmail(config: Config, email: string, subject: string, tex
         : response.status === 429
           ? "Resend rate or account quota limit reached."
           : "Check Resend request logs for the rejection reason.";
-    console.error(`Authentication email delivery failed (Resend HTTP ${response.status}). ${hint}`);
+    console.error(`Email delivery failed (Resend HTTP ${response.status}). ${hint}`);
     throw new Error("Unable to deliver email. Please try again later.");
   }
 }

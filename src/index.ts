@@ -8,6 +8,7 @@ import { startPushDelivery } from "./push-delivery";
 import { startReceiptCleanup } from "./receipt-cleanup";
 import { createHealthService } from "./modules/health/service";
 import { assertRuntimeDatabaseAccess } from "./database-access";
+import { sendConsultationEmail } from "./modules/auth/email";
 
 const config = loadConfig();
 const db = createDatabase(config.DATABASE_URL);
@@ -36,6 +37,7 @@ const app = createApp({
   authHandler: auth.handler,
   origins: config.TRUSTED_ORIGINS,
   receipts,
+  sendConsultation: config.RESEND_API_KEY && config.EMAIL_FROM ? request => sendConsultationEmail(config, request) : undefined,
 }).listen({ port: config.PORT, reusePort: false });
 console.log(`SSL School API listening on port ${config.PORT}`);
 const stopReminders = startLessonReminders(db);

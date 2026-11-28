@@ -18,6 +18,7 @@ import { paymentRoutes } from "./modules/payments/routes";
 import { notificationRoutes } from "./modules/notifications/routes";
 import { auditRoutes } from "./modules/audit/routes";
 import { performanceRoutes } from "./modules/performance/routes";
+import { consultationRoutes, type SendConsultation } from "./modules/consultation/routes";
 import type { ReceiptStorage } from "./receipt-storage";
 import { webSubscription } from "./web-push";
 
@@ -27,6 +28,7 @@ type Dependencies = {
   authHandler: AuthHandler;
   origins: string[];
   receipts?: ReceiptStorage;
+  sendConsultation?: SendConsultation;
 };
 
 export function createApp({
@@ -35,6 +37,7 @@ export function createApp({
   authHandler,
   origins,
   receipts,
+  sendConsultation,
 }: Dependencies) {
   const actorFor = createActorResolver(db, getSession);
 
@@ -97,6 +100,7 @@ export function createApp({
       return { error: "Internal server error" };
     })
     .use(healthRoutes(db))
+    .use(consultationRoutes(sendConsultation))
     .use(authRoutes(authHandler))
     .use(peopleRoutes(db, actorFor))
     .use(roleRoutes(db, actorFor))

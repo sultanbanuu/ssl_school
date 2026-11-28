@@ -13,6 +13,8 @@ export const envSchema = z
     BETTER_AUTH_URL: z.string().url(),
     RESEND_API_KEY: z.string().trim().min(1).optional(),
     EMAIL_FROM: z.string().trim().email().optional(),
+    // Inbox that receives requests from the landing page's consultation form.
+    CONSULTATION_EMAIL: z.string().trim().email().optional(),
     TRUSTED_ORIGINS: z
       .string()
       .min(1)
